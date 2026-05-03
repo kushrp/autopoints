@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "program": "British Airways Executive Club (Avios)",
+    "type": "distance-based",
+    "description": "BA Avios Reward Flight Saver chart for one-way partner awards. Distance buckets in statute miles. Heavy fuel surcharges apply on BA-metal long-haul; partner redemptions (American, Cathay, JAL, Qatar, Iberia, Qantas) typically have lower surcharges. Saver levels shown.",
+    "last_reviewed": "2026-05-01",
+    "source": "https://www.britishairways.com/travel/reward-flight-saver/public/en_us"
+  },
+  "within_north_america": {
+    "economy": [
+      {"max_distance": 650, "points": 9000},
+      {"max_distance": 1150, "points": 11000},
+      {"max_distance": 2000, "points": 13000},
+      {"max_distance": 3000, "points": 22000},
+      {"max_distance": 99999, "points": 33000}
+    ],
+    "premium_economy": [
+      {"max_distance": 650, "points": 18000},
+      {"max_distance": 1150, "points": 22000},
+      {"max_distance": 2000, "points": 26000},
+      {"max_distance": 3000, "points": 44000},
+      {"max_distance": 99999, "points": 66000}
+    ],
+    "business": [
+      {"max_distance": 650, "points": 18000},
+      {"max_distance": 1150, "points": 22000},
+      {"max_distance": 2000, "points": 26000},
+      {"max_distance": 3000, "points": 44000},
+      {"max_distance": 99999, "points": 66000}
+    ],
+    "first": [
+      {"max_distance": 650, "points": 36000},
+      {"max_distance": 1150, "points": 44000},
+      {"max_distance": 2000, "points": 52000},
+      {"max_distance": 3000, "points": 88000},
+      {"max_distance": 99999, "points": 132000}
+    ]
+  }
+}
