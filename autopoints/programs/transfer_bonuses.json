@@ -1,0 +1,7 @@
+{
+  "_meta": {
+    "description": "Active transfer bonuses. Each entry: from_currency -> to_program with multiplier and date window. multiplier 1.3 means 30% bonus (1000 points -> 1300 miles).",
+    "last_reviewed": "2026-05-01"
+  },
+  "active": []
+}

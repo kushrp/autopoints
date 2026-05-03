@@ -1,0 +1,24 @@
+{
+  "_meta": {
+    "description": "Per-program reference cents-per-point. Pulled from TPG monthly valuations and cross-checked against Frequent Miler reasonable redemption values.",
+    "source": "TPG May 2026 / Frequent Miler Q2 2026",
+    "last_reviewed": "2026-05-01"
+  },
+  "UR": 2.05,
+  "MR": 2.0,
+  "UA": 1.35,
+  "AC": 1.5,
+  "BA": 1.4,
+  "AF": 1.3,
+  "VS": 1.4,
+  "DL": 1.2,
+  "EK": 1.2,
+  "EY": 1.3,
+  "NH": 1.4,
+  "SQ": 1.3,
+  "AM": 0.5,
+  "IB": 1.4,
+  "QF": 1.3,
+  "ET": 1.4,
+  "JL": 1.4
+}
