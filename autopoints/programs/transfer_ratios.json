@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "description": "Transfer ratios from a points currency to an airline loyalty program. Format: ratio means 'X UR points = 1 partner mile'. 1.0 = 1:1 (most common).",
+    "last_reviewed": "2026-05-01"
+  },
+  "UR": {
+    "UA": 1.0,
+    "AC": 1.0,
+    "BA": 1.0,
+    "AF": 1.0,
+    "VS": 1.0,
+    "EK": 1.0,
+    "JL": 1.0,
+    "IB": 1.0,
+    "SQ": 1.0
+  },
+  "MR": {
+    "AC": 1.0,
+    "BA": 1.0,
+    "AF": 1.0,
+    "VS": 1.0,
+    "DL": 1.0,
+    "EK": 1.0,
+    "EY": 1.0,
+    "NH": 1.0,
+    "SQ": 1.0,
+    "AM": 1.6,
+    "IB": 1.0,
+    "QF": 1.0,
+    "ET": 1.0
+  },
+  "DIRECT": {
+    "AC": 1.0,
+    "BA": 1.0,
+    "UA": 1.0,
+    "DL": 1.0,
+    "AF": 1.0,
+    "VS": 1.0
+  }
+}

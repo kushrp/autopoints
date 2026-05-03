@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "program": "Aeroplan (Air Canada)",
+    "type": "distance-based",
+    "description": "Aeroplan flight reward chart. Buckets are great-circle distance miles between origin and destination. Prices are one-way per passenger in points. Two regions: 'within_north_america' (intra-NA flights on Air Canada or partner) and 'between_regions' (international). Saver economy is the published floor; dynamic pricing can run higher.",
+    "last_reviewed": "2026-05-01",
+    "source": "https://www.aircanada.com/aeroplan/redemption/flight-rewards/"
+  },
+  "within_north_america": {
+    "economy": [
+      {"max_distance": 500, "points": 6000},
+      {"max_distance": 1500, "points": 10000},
+      {"max_distance": 2750, "points": 12500},
+      {"max_distance": 99999, "points": 17500}
+    ],
+    "premium_economy": [
+      {"max_distance": 500, "points": 11500},
+      {"max_distance": 1500, "points": 15000},
+      {"max_distance": 2750, "points": 22000},
+      {"max_distance": 99999, "points": 30000}
+    ],
+    "business": [
+      {"max_distance": 500, "points": 15000},
+      {"max_distance": 1500, "points": 20000},
+      {"max_distance": 2750, "points": 25000},
+      {"max_distance": 99999, "points": 35000}
+    ],
+    "first": [
+      {"max_distance": 500, "points": 20000},
+      {"max_distance": 1500, "points": 25000},
+      {"max_distance": 2750, "points": 35000},
+      {"max_distance": 99999, "points": 50000}
+    ]
+  }
+}
