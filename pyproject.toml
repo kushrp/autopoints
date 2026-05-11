@@ -26,11 +26,20 @@ dev = [
     "respx>=0.21",
     "ruff>=0.5",
     "mypy>=1.10",
+    "playwright>=1.45",
+]
+e2e = [
+    "playwright>=1.45",
+    "pytest-playwright>=0.5",
+]
+discord = [
+    "discord.py>=2.4",
 ]
 
 [project.scripts]
 autopoints = "autopoints.cli.main:app"
 autopoints-server = "autopoints.api.server:run"
+autopoints-discord = "autopoints.discord_bot.server:run"
 
 [build-system]
 requires = ["hatchling"]
@@ -41,7 +50,11 @@ packages = ["autopoints"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
+testpaths = ["tests", "tests/e2e"]
+addopts = "-m 'not e2e'"
+markers = [
+    "e2e: browser-driven end-to-end tests (requires playwright install chromium)",
+]
 
 [tool.ruff]
 line-length = 100

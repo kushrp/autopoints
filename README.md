@@ -52,6 +52,22 @@ autopoints watchlist remove <id>
 
 The runner persists the signature of every hit it's posted, so the next run distinguishes "NEW" from "still here." Pair with a cron job + webhook for fully automated alerts.
 
+### Discord bot
+
+A personal travel agent that lives in your server. Slash commands for search and watchlist management, optional background loop that posts new sub-threshold hits to a channel on a schedule.
+
+```sh
+uv pip install -e ".[discord]"
+export DISCORD_BOT_TOKEN=...
+autopoints-discord
+```
+
+In Discord:
+- `/search origin:JFK destination:PHX depart_date_iso:2026-06-15 window:2 demo:true`
+- `/watchlist add | list | remove | run`
+
+Set `DISCORD_NOTIFY_CHANNEL_ID` + `DISCORD_RUN_INTERVAL_MINUTES` to enable auto-runs.
+
 ### HTTP API
 
 ```
@@ -128,13 +144,17 @@ The plan's verification steps (see `/root/.claude/plans/`):
 4. **Cache:** rerun within 1h, second run completes in <100ms.
 5. **Failure isolation:** with bogus credentials, the failing provider produces a warning row, the search still returns whatever else worked.
 
-## Tests
+## Testing
+
+Three layers (see `docs/E2E.md` for details):
 
 ```sh
-.venv/bin/pytest
+.venv/bin/pytest          # 45 unit + integration tests, <1s
+./scripts/e2e.py          # HTTP + CLI smoke test against a real uvicorn, ~3s
+.venv/bin/pytest -m e2e   # Playwright browser test (requires `playwright install chromium`)
 ```
 
-33 tests covering CPP math, transfer ratios, distance/chart lookup, orchestrator behavior (caching, force-refresh, partial failure, date windows), HTTP API endpoints (health, programs, search, validation, watchlists), and watchlist diff/persistence.
+CI runs all three on every push (`.github/workflows/test.yml`).
 
 ## Repo layout
 
