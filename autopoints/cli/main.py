@@ -8,11 +8,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from autopoints.cli.watchlist import app as watchlist_app
 from autopoints.search.build import BuildOptions, build_orchestrator
 from autopoints.search.models import Cabin, SearchRequest
 from autopoints.search.orchestrator import SearchOutcome
 
 app = typer.Typer(add_completion=False, help="autopoints — cash vs. award CPP engine.")
+app.add_typer(watchlist_app, name="watchlist")
 console = Console()
 
 

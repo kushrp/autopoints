@@ -1,8 +1,16 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from autopoints.api.main import app
+from autopoints.config import settings
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_storage(tmp_path, monkeypatch):
+    """Point file-backed stores at a per-test temp dir."""
+    monkeypatch.setattr(settings, "autopoints_cache_path", tmp_path / "cache.db")
 
 
 def test_health():
@@ -79,3 +87,41 @@ def test_search_window_clamped():
         },
     )
     assert r.status_code == 422
+
+
+def test_watchlist_crud_and_run():
+    r = client.post(
+        "/api/watchlists",
+        json={
+            "origin": "JFK", "destination": "PHX",
+            "depart_date": "2026-06-15", "window_days": 1,
+            "cabin": "economy", "passengers": 1,
+            "threshold_cpp": 1.0, "label": "test",
+        },
+    )
+    assert r.status_code == 200
+    wl = r.json()
+    wl_id = wl["id"]
+    assert wl["label"] == "test"
+
+    r = client.get("/api/watchlists")
+    assert r.status_code == 200
+    assert any(x["id"] == wl_id for x in r.json())
+
+    r = client.post("/api/watchlists/run?demo=true")
+    assert r.status_code == 200, r.text
+    runs = r.json()
+    assert len(runs) == 1
+    assert runs[0]["watchlist"]["id"] == wl_id
+    assert len(runs[0]["hits"]) > 0
+    assert all(h["is_new"] for h in runs[0]["hits"])
+
+    # Second run -> previously seen
+    r = client.post("/api/watchlists/run?demo=true")
+    runs = r.json()
+    assert all(not h["is_new"] for h in runs[0]["hits"])
+
+    r = client.delete(f"/api/watchlists/{wl_id}")
+    assert r.status_code == 200
+    r = client.delete(f"/api/watchlists/{wl_id}")
+    assert r.status_code == 404

@@ -15,11 +15,17 @@ from autopoints.api.models import (
     SearchAPIRequest,
     SearchAPIResponse,
     SearchEcho,
+    WatchlistCreate,
+    WatchlistHitView,
+    WatchlistRunView,
+    WatchlistView,
 )
 from autopoints.config import settings
 from autopoints.programs.loader import transfer_ratios, valuations
 from autopoints.search.build import SUPPORTED_CHART_PROGRAMS, BuildOptions, build_orchestrator
 from autopoints.search.models import SearchRequest
+from autopoints.watchlist_runner import run_all, store_for_settings
+from autopoints.watchlists import Watchlist
 
 
 def _web_dir() -> Path:
@@ -93,7 +99,63 @@ def create_app() -> FastAPI:
             warnings=built.warnings + outcome.warnings,
         )
 
+    @app.get("/api/watchlists", response_model=list[WatchlistView])
+    async def list_watchlists() -> list[WatchlistView]:
+        return [_watchlist_to_view(w) for w in store_for_settings().list()]
+
+    @app.post("/api/watchlists", response_model=WatchlistView)
+    async def create_watchlist(req: WatchlistCreate) -> WatchlistView:
+        store = store_for_settings()
+        wl = store.add(
+            origin=req.origin,
+            destination=req.destination,
+            depart_date=req.depart_date,
+            window_days=req.window_days,
+            cabin=req.cabin,
+            passengers=req.passengers,
+            threshold_cpp=req.threshold_cpp,
+            label=req.label,
+        )
+        return _watchlist_to_view(wl)
+
+    @app.delete("/api/watchlists/{watchlist_id}")
+    async def delete_watchlist(watchlist_id: str) -> dict:
+        if not store_for_settings().remove(watchlist_id):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"deleted": watchlist_id}
+
+    @app.post("/api/watchlists/run", response_model=list[WatchlistRunView])
+    async def run_watchlists(
+        demo: bool = True,
+        live_aeroplan: bool = False,
+    ) -> list[WatchlistRunView]:
+        store = store_for_settings()
+        results = await run_all(store, demo=demo, use_live_aeroplan=live_aeroplan)
+        return [
+            WatchlistRunView(
+                watchlist=_watchlist_to_view(r.watchlist),
+                hits=[WatchlistHitView(is_new=h.is_new, redemption=h.redemption) for h in r.hits],
+                warnings=r.warnings,
+            )
+            for r in results
+        ]
+
     return app
+
+
+def _watchlist_to_view(wl: Watchlist) -> WatchlistView:
+    return WatchlistView(
+        id=wl.id,
+        origin=wl.origin,
+        destination=wl.destination,
+        depart_date=wl.depart_date,
+        window_days=wl.window_days,
+        cabin=wl.cabin,
+        passengers=wl.passengers,
+        threshold_cpp=wl.threshold_cpp,
+        label=wl.label,
+        created_at=wl.created_at,
+    )
 
 
 def _programs_payload() -> ProgramsResponse:

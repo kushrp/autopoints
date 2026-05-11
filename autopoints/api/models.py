@@ -40,3 +40,38 @@ class ProgramsResponse(BaseModel):
     transfer_ratios: dict[str, dict[str, float]]
     supported_charts: list[str]
     cpp_thresholds: dict[str, float]
+
+
+class WatchlistCreate(BaseModel):
+    origin: str = Field(min_length=3, max_length=3)
+    destination: str = Field(min_length=3, max_length=3)
+    depart_date: date
+    window_days: int = Field(default=3, ge=0, le=7)
+    cabin: Cabin = Cabin.economy
+    passengers: int = Field(default=1, ge=1, le=9)
+    threshold_cpp: float = Field(default=1.8, ge=0.0, le=10.0)
+    label: str | None = None
+
+
+class WatchlistView(BaseModel):
+    id: str
+    origin: str
+    destination: str
+    depart_date: date
+    window_days: int
+    cabin: Cabin
+    passengers: int
+    threshold_cpp: float
+    label: str | None
+    created_at: float
+
+
+class WatchlistHitView(BaseModel):
+    is_new: bool
+    redemption: RedemptionResult
+
+
+class WatchlistRunView(BaseModel):
+    watchlist: WatchlistView
+    hits: list[WatchlistHitView]
+    warnings: list[str]

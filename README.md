@@ -38,12 +38,30 @@ autopoints-server   # serves http://127.0.0.1:8000
 
 Open the URL — single-page app with a search form, ranked results table, and a date-grid heatmap of best CPP per program per day. Demo mode is on by default so the UI works without API credentials. Toggle it off and configure Amadeus credentials in `.env` for real cash data.
 
+### Watchlists
+
+Saved searches that re-run on demand and tell you what's *new* since last time.
+
+```sh
+autopoints watchlist add JFK PHX 2026-06-15 --window 7 --threshold 1.8 --label "summer"
+autopoints watchlist list
+autopoints watchlist run --demo
+autopoints watchlist run --demo --only-new --webhook https://hooks.slack.com/...
+autopoints watchlist remove <id>
+```
+
+The runner persists the signature of every hit it's posted, so the next run distinguishes "NEW" from "still here." Pair with a cron job + webhook for fully automated alerts.
+
 ### HTTP API
 
 ```
-GET  /api/health         → {status, version}
-GET  /api/programs       → valuations + transfer ratios + supported charts + thresholds
-POST /api/search         → ranked redemptions for a route + window
+GET    /api/health           → {status, version}
+GET    /api/programs         → valuations + transfer ratios + supported charts + thresholds
+POST   /api/search           → ranked redemptions for a route + window
+GET    /api/watchlists       → saved searches
+POST   /api/watchlists       → create
+DELETE /api/watchlists/{id}  → remove
+POST   /api/watchlists/run?demo=true → run all, return hits with is_new flag
 ```
 
 `POST /api/search` body:
@@ -116,13 +134,15 @@ The plan's verification steps (see `/root/.claude/plans/`):
 .venv/bin/pytest
 ```
 
-27 tests covering CPP math, transfer ratios, distance/chart lookup, orchestrator behavior (caching, force-refresh, partial failure, date windows), and HTTP API endpoints (health, programs, search, validation).
+33 tests covering CPP math, transfer ratios, distance/chart lookup, orchestrator behavior (caching, force-refresh, partial failure, date windows), HTTP API endpoints (health, programs, search, validation, watchlists), and watchlist diff/persistence.
 
 ## Repo layout
 
 ```
 autopoints/
-  cli/main.py                  # Typer entrypoint
+  cli/
+    main.py                    # Typer root (search + watchlist subcommands)
+    watchlist.py               # `autopoints watchlist add|list|remove|run`
   api/
     main.py                    # FastAPI app: GET /, /api/health, /api/programs, POST /api/search
     models.py                  # API request/response schemas
@@ -149,16 +169,17 @@ autopoints/
     airports.json              # IATA → lat/lon
     award_charts/{ac,ba,vs}.json # Aeroplan / BA Avios / Virgin Atlantic charts
   cache/store.py               # SQLite TTL cache
-tests/                         # pytest (CPP, geo, charts, orchestrator, API)
+  watchlists.py                # saved-search storage + diff against prior runs
+  watchlist_runner.py          # async runner + webhook poster
+tests/                         # pytest (CPP, geo, charts, orchestrator, API, watchlists)
 ```
 
 ## What's next
 
-- **Flying Blue + United chart providers.** Flying Blue is fully dynamic (no chart fallback feasible).
 - **Live award providers beyond Aeroplan.** BA Avios next (distance chart already in place — just need the live endpoint adapter); Virgin Atlantic and Flying Blue after.
-- **Transfer bonuses live tracking.** Currently manual JSON; could scrape doctorofcredit / FrequentMiler.
-- **Watchlists.** Saved routes re-run nightly, notify on new sub-2.0¢ redemptions.
-- **More airports.** Extend `programs/airports.json`; OpenFlights `airports.dat` is a good source for full coverage.
+- **Transfer bonuses live tracking.** Currently manual JSON; could scrape doctorofcredit / FrequentMiler monthly.
+- **Watchlist UI.** Watchlist CRUD is on the HTTP API but not the web UI yet — a small "saved searches" panel would close that loop.
+- **More airports.** ~343 currently covered; extend `programs/airports.json` for full OpenFlights coverage if needed.
 
 ## Caveats
 
