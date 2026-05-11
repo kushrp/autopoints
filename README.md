@@ -7,6 +7,7 @@ The point: stop guessing whether 12,500 Aeroplan points is a "good deal" for tha
 ## Where to start
 
 - **Deploying to a NAS or any Docker host?** → [`docs/DEPLOY.md`](docs/DEPLOY.md). One-shot compose file + GHCR + Watchtower for hands-off auto-updates.
+- **Want Claude Code on your Mac to SSH into your NAS and Portainer and deploy it for you?** → [`docs/DEPLOY_FROM_MAC.md`](docs/DEPLOY_FROM_MAC.md). Drop-in prompt + runbook.
 - **First-time setup?** → Run `autopoints-server` and open `http://localhost:8000`. The onboarding wizard walks through everything.
 - **Why this exists vs. seats.aero / point.me?** → [`docs/STRATEGY.md`](docs/STRATEGY.md).
 - **End-to-end testing?** → [`docs/E2E.md`](docs/E2E.md).
