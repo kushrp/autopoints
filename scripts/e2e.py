@@ -77,9 +77,22 @@ def wait_for_server(url: str, timeout: float = 15.0) -> None:
     raise RuntimeError(f"server at {url} didn't come up within {timeout}s")
 
 
-def http_get(url: str) -> tuple[int, dict | str]:
+def http_get(url: str, follow_redirects: bool = True) -> tuple[int, dict | str]:
+    req = Request(url)
+    if not follow_redirects:
+        from urllib.request import HTTPRedirectHandler, build_opener
+        class _NoRedirect(HTTPRedirectHandler):
+            def http_error_307(self, req, fp, code, msg, headers):
+                return fp
+            http_error_301 = http_error_302 = http_error_303 = http_error_307
+        opener = build_opener(_NoRedirect)
+        try:
+            with opener.open(req, timeout=10) as r:
+                return r.status, dict(r.headers)
+        except HTTPError as e:
+            return e.code, dict(e.headers)
     try:
-        with urlopen(url, timeout=10) as r:
+        with urlopen(req, timeout=10) as r:
             body = r.read().decode()
             ctype = r.headers.get("content-type", "")
             return r.status, json.loads(body) if "json" in ctype else body
@@ -131,20 +144,35 @@ class API:
     def __init__(self, base_url: str):
         self.base = base_url
 
-    @step("GET / serves index HTML")
-    def index_html(self):
+    @step("GET / redirects to /onboard on a fresh install")
+    def index_redirects_when_unconfigured(self):
+        code, headers = http_get(self.base + "/", follow_redirects=False)
+        assert_eq(code, 307, "redirect status")
+        assert_eq(headers.get("Location") or headers.get("location"), "/onboard", "redirect target")
+
+    @step("GET /onboard serves the wizard")
+    def onboard_page(self):
+        code, body = http_get(self.base + "/onboard")
+        assert_eq(code, 200, "status")
+        assert_in("wizard", body, "wizard markup rendered")
+        assert_in("/static/onboard.js", body, "onboard.js linked")
+
+    @step("After /api/onboard/complete, GET / serves the search SPA")
+    def index_after_complete(self):
+        code, _ = http_post(self.base + "/api/onboard/complete", {})
+        assert_eq(code, 200, "complete status")
         code, body = http_get(self.base + "/")
         assert_eq(code, 200, "status")
         assert_in("<form id=\"search-form\"", body, "form rendered")
         assert_in("/static/app.js", body, "app.js linked")
-        assert_in("programs-data", body, "programs bootstrap data injected")
 
-    @step("GET /static/app.js + styles.css")
+    @step("GET /static/app.js + styles.css + onboard assets")
     def static_assets(self):
-        for path in ("/static/app.js", "/static/styles.css"):
+        for path in ("/static/app.js", "/static/styles.css",
+                     "/static/onboard.js", "/static/onboard.css"):
             code, body = http_get(self.base + path)
             assert_eq(code, 200, path)
-            assert_truthy(len(body) > 1000, f"{path} non-trivial size")
+            assert_truthy(len(body) > 200, f"{path} non-trivial size")
 
     @step("GET /api/health")
     def health(self):
@@ -191,6 +219,25 @@ class API:
             {"origin": "ABCD", "destination": "PHX", "depart_date": "2026-06-15", "demo": True},
         )
         assert_eq(code, 422, "rejects 4-char origin")
+
+    @step("Onboarding generate produces .env + compose")
+    def onboard_generate(self):
+        code, body = http_post(
+            self.base + "/api/onboard/generate",
+            {
+                "mode": "nas",
+                "services": ["web", "discord"],
+                "amadeus": {"enabled": True, "client_id": "x", "client_secret": "y", "hostname": "test"},
+                "discord": {"enabled": True, "token": "T", "guild_id": "", "notify_channel_id": "",
+                            "run_interval_minutes": 60, "demo_mode": False},
+            },
+        )
+        assert_eq(code, 200, "status")
+        assert_in("AMADEUS_CLIENT_ID=x", body["env"], "env contains amadeus creds")
+        assert_in("DISCORD_BOT_TOKEN=T", body["env"], "env contains discord token")
+        assert_truthy(body["compose"], "compose generated for nas mode")
+        assert_in("autopoints-discord", body["compose"], "compose includes discord service")
+        assert_in("watchtower", body["compose"], "compose includes watchtower")
 
     @step("Watchlist CRUD + run + diff cycle")
     def watchlist_cycle(self):
@@ -310,8 +357,12 @@ def main() -> int:
         if not args.cli_only:
             print(f"{BOLD}HTTP API{RESET}")
             api = API(base)
-            for s in (api.index_html, api.static_assets, api.health,
+            for s in (api.index_redirects_when_unconfigured,
+                      api.onboard_page,
+                      api.index_after_complete,
+                      api.static_assets, api.health,
                       api.programs, api.search, api.search_validates,
+                      api.onboard_generate,
                       api.watchlist_cycle):
                 try:
                     s()

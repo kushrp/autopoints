@@ -1,0 +1,28 @@
+# Production overrides. Layer on top of docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Skips local builds (uses pre-built image from GHCR) and adds Watchtower
+# for hands-off auto-updates from main.
+
+services:
+  web:
+    build: !reset null
+    pull_policy: always
+
+  discord:
+    build: !reset null
+    pull_policy: always
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: autopoints-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: "300"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      TZ: ${TZ:-UTC}
+    restart: unless-stopped

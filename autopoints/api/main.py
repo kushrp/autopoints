@@ -4,12 +4,13 @@ from importlib.resources import files
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from autopoints import __version__
+from autopoints.api import onboard as onboard_mod
 from autopoints.api.models import (
     ProgramsResponse,
     SearchAPIRequest,
@@ -19,6 +20,14 @@ from autopoints.api.models import (
     WatchlistHitView,
     WatchlistRunView,
     WatchlistView,
+)
+from autopoints.api.onboard import (
+    AmadeusTestRequest,
+    DiscordTestRequest,
+    GenerateRequest,
+    GenerateResponse,
+    OnboardStatus,
+    TestResult,
 )
 from autopoints.config import settings
 from autopoints.programs.loader import transfer_ratios, valuations
@@ -39,13 +48,49 @@ def create_app() -> FastAPI:
     templates = Jinja2Templates(directory=str(web_dir / "templates"))
     app.mount("/static", StaticFiles(directory=str(web_dir / "static")), name="static")
 
-    @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request) -> HTMLResponse:
+    @app.get("/", response_model=None)
+    async def index(request: Request) -> HTMLResponse | RedirectResponse:
+        if not onboard_mod.is_configured().configured:
+            return RedirectResponse(url="/onboard", status_code=307)
         return templates.TemplateResponse(
             request,
             "index.html",
             {"programs": _programs_payload().model_dump()},
         )
+
+    @app.get("/onboard", response_class=HTMLResponse)
+    async def onboard_page(request: Request) -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "onboard.html",
+            {"status": onboard_mod.is_configured().model_dump()},
+        )
+
+    @app.get("/api/onboard/status", response_model=OnboardStatus)
+    async def onboard_status() -> OnboardStatus:
+        return onboard_mod.is_configured()
+
+    @app.post("/api/onboard/test/amadeus", response_model=TestResult)
+    async def onboard_test_amadeus(req: AmadeusTestRequest) -> TestResult:
+        return await onboard_mod.test_amadeus(req)
+
+    @app.post("/api/onboard/test/discord", response_model=TestResult)
+    async def onboard_test_discord(req: DiscordTestRequest) -> TestResult:
+        return await onboard_mod.test_discord(req)
+
+    @app.post("/api/onboard/generate", response_model=GenerateResponse)
+    async def onboard_generate(req: GenerateRequest) -> GenerateResponse:
+        return onboard_mod.generate(req)
+
+    @app.post("/api/onboard/complete")
+    async def onboard_complete() -> dict:
+        onboard_mod.mark_complete()
+        return {"ok": True}
+
+    @app.delete("/api/onboard/complete")
+    async def onboard_reset() -> dict:
+        onboard_mod.unmark_complete()
+        return {"ok": True}
 
     @app.get("/api/health")
     async def health() -> dict:

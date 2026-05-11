@@ -4,6 +4,13 @@ Automated points-redemption value engine. Given a route + date, fetch cash price
 
 The point: stop guessing whether 12,500 Aeroplan points is a "good deal" for that JFK→PHX flight. The tool computes `(cash − taxes) / points` and tells you.
 
+## Where to start
+
+- **Deploying to a NAS or any Docker host?** → [`docs/DEPLOY.md`](docs/DEPLOY.md). One-shot compose file + GHCR + Watchtower for hands-off auto-updates.
+- **First-time setup?** → Run `autopoints-server` and open `http://localhost:8000`. The onboarding wizard walks through everything.
+- **Why this exists vs. seats.aero / point.me?** → [`docs/STRATEGY.md`](docs/STRATEGY.md).
+- **End-to-end testing?** → [`docs/E2E.md`](docs/E2E.md).
+
 ## Install
 
 Requires Python 3.11+.
@@ -11,10 +18,10 @@ Requires Python 3.11+.
 ```sh
 uv venv --python 3.11
 uv pip install -e ".[dev]"
-cp .env.example .env
-# Fill in AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET. Free tier: 2k calls/mo.
-# Sign up at https://developers.amadeus.com/register
+autopoints-server     # http://localhost:8000 — the wizard greets you
 ```
+
+For the CLI-only path, copy `.env.example` to `.env` and add your Amadeus keys (free 2k/mo at <https://developers.amadeus.com/register>).
 
 ## Usage
 
