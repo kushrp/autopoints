@@ -1,0 +1,691 @@
+/* ===== Wizard layout ===== */
+
+.wizard {
+  max-width: 760px;
+}
+
+/* ===== Progress bar ===== */
+
+.wizard-progress {
+  margin-bottom: 24px;
+}
+
+.wizard-progress-list {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wizard-progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  padding-top: 4px;
+}
+
+.wizard-progress-step::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.wizard-progress-step:last-child::before {
+  display: none;
+}
+
+.wizard-progress-step.is-complete::before {
+  background: var(--accent);
+}
+
+.wizard-progress-dot {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.wizard-progress-step.is-current .wizard-progress-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.wizard-progress-step.is-complete .wizard-progress-dot {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.wizard-progress-step.is-skipped .wizard-progress-dot {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.wizard-progress-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wizard-progress-step.is-current .wizard-progress-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .wizard-progress-label {
+    display: none;
+  }
+}
+
+/* ===== Steps ===== */
+
+.wizard-step[hidden] {
+  display: none !important;
+}
+
+.wizard-step .results-header h2 {
+  font-family: var(--font-sans);
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.wizard-step .results-header p.muted {
+  font-size: 13px;
+  max-width: 60ch;
+}
+
+/* ===== Radio cards (Steps 1, 3) ===== */
+
+.wizard-radio-cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+}
+
+@media (min-width: 640px) {
+  .wizard-radio-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.wizard-card-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.1s ease, background 0.1s ease, box-shadow 0.1s ease;
+}
+
+.wizard-card-option:hover {
+  border-color: var(--accent);
+}
+
+.wizard-card-option input[type="radio"] {
+  margin-top: 2px;
+  accent-color: var(--accent);
+}
+
+.wizard-card-option:has(input[type="radio"]:checked) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+  background: var(--bg-elev);
+}
+
+.wizard-card-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wizard-card-option-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.wizard-card-option-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.wizard-card-option-desc code,
+.wizard-check-desc code,
+.wizard-step p code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-sunken);
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+/* ===== Checkbox list (Step 2) ===== */
+
+.wizard-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.wizard-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.1s ease, background 0.1s ease;
+}
+
+.wizard-check:has(input[type="checkbox"]:checked) {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+}
+
+.wizard-check:has(input[type="checkbox"]:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wizard-check input[type="checkbox"] {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.wizard-check-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.wizard-check-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wizard-check-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ===== Conditional regions ===== */
+
+.wizard-conditional {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--bg-sunken);
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+}
+
+.wizard-conditional[hidden] {
+  display: none !important;
+}
+
+.wizard-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.wizard-form-stack input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.wizard-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.wizard-hint a {
+  color: var(--accent);
+}
+
+/* ===== Test row / inline status ===== */
+
+.wizard-test-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.wizard-test-btn,
+.wizard-template-add {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.wizard-test-btn:hover:not(:disabled),
+.wizard-template-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-test-btn:disabled,
+.wizard-template-add:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wizard-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wizard-status.is-ok {
+  color: var(--verdict-great-fg);
+}
+
+.wizard-status.is-err {
+  color: var(--error-fg);
+}
+
+.wizard-status .pill-status {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wizard-status.is-ok .pill-status {
+  background: var(--verdict-great-bg);
+  color: var(--verdict-great-fg);
+}
+
+.wizard-status.is-err .pill-status {
+  background: var(--error-bg);
+  color: var(--error-fg);
+}
+
+/* ===== Help tooltip ===== */
+
+.wizard-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+  margin-left: 4px;
+  cursor: help;
+  position: relative;
+}
+
+.wizard-help:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.wizard-help:hover::after,
+.wizard-help:focus::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 280px;
+  background: var(--text);
+  color: var(--bg-elev);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ===== Actions row ===== */
+
+.wizard-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.wizard-back {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
+.wizard-back:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* ===== Error text ===== */
+
+.wizard-error {
+  font-size: 12px;
+  color: var(--error-fg);
+  margin: 8px 0 0;
+  min-height: 1em;
+}
+
+.wizard-error:empty {
+  display: none;
+}
+
+/* ===== Step 5: templates & staged list ===== */
+
+.wizard-template-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.wizard-template-btn {
+  flex: 1 1 auto;
+  min-width: 140px;
+  padding: 12px 14px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.wizard-template-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-template-btn.is-active {
+  border-color: var(--accent);
+  background: var(--bg-elev);
+  color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.wizard-skip-btn {
+  color: var(--text-muted);
+}
+
+.wizard-staged {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.wizard-staged[hidden] {
+  display: none;
+}
+
+.wizard-staged-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-staged-list:empty {
+  display: none;
+}
+
+.wizard-staged-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.wizard-staged-item.is-ok {
+  border-color: color-mix(in srgb, var(--verdict-great-fg) 40%, var(--border));
+}
+
+.wizard-staged-item.is-err {
+  border-color: var(--error-border);
+}
+
+.wizard-staged-item .wizard-staged-status {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.wizard-staged-item.is-ok .wizard-staged-status {
+  color: var(--verdict-great-fg);
+}
+
+.wizard-staged-item.is-err .wizard-staged-status {
+  color: var(--error-fg);
+}
+
+.wizard-staged-remove {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 3px 8px;
+}
+
+.wizard-staged-remove:hover {
+  color: var(--error-fg);
+  border-color: var(--error-border);
+}
+
+/* ===== Step 6: tabs & code blocks ===== */
+
+.wizard-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wizard-tab {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.wizard-tab:hover {
+  color: var(--text);
+}
+
+.wizard-tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.wizard-tab[hidden] {
+  display: none;
+}
+
+.wizard-tab-panel {
+  display: none;
+}
+
+.wizard-tab-panel.is-active {
+  display: block;
+}
+
+.wizard-codeblock-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.wizard-copy,
+.wizard-download {
+  background: var(--bg-elev);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.wizard-copy:hover,
+.wizard-download:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.wizard-copy.is-copied {
+  color: var(--verdict-great-fg);
+  border-color: var(--verdict-great-fg);
+}
+
+.wizard-codeblock {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre;
+  overflow-x: auto;
+  max-height: 360px;
+}
+
+.wizard-codeblock code {
+  font-family: inherit;
+  white-space: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+/* ===== Step 6: done actions ===== */
+
+.wizard-done-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.wizard-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.wizard-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.wizard-secondary:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ===== Inline button spinner (reuses .spinner from styles.css) ===== */
+
+.wizard-test-btn .spinner,
+.wizard-primary .spinner,
+.wizard-template-add .spinner {
+  margin-right: 6px;
+}

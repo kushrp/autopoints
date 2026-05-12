@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "program": "Virgin Atlantic Flying Club",
+    "type": "distance-based",
+    "description": "Virgin Atlantic Flying Club one-way partner award chart. Distance buckets in statute miles. Best value via Delta and ANA partner redemptions. Listed values are for partner-operated flights (lower surcharges than VS-metal long-haul).",
+    "last_reviewed": "2026-05-01",
+    "source": "https://www.virginatlantic.com/flying-club/use-points/flight-rewards"
+  },
+  "within_north_america": {
+    "economy": [
+      {"max_distance": 500, "points": 7500},
+      {"max_distance": 1000, "points": 10000},
+      {"max_distance": 1500, "points": 12500},
+      {"max_distance": 3000, "points": 15000},
+      {"max_distance": 99999, "points": 20000}
+    ],
+    "premium_economy": [
+      {"max_distance": 500, "points": 15000},
+      {"max_distance": 1000, "points": 20000},
+      {"max_distance": 1500, "points": 25000},
+      {"max_distance": 3000, "points": 30000},
+      {"max_distance": 99999, "points": 40000}
+    ],
+    "business": [
+      {"max_distance": 500, "points": 15000},
+      {"max_distance": 1000, "points": 20000},
+      {"max_distance": 1500, "points": 25000},
+      {"max_distance": 3000, "points": 30000},
+      {"max_distance": 99999, "points": 40000}
+    ],
+    "first": [
+      {"max_distance": 500, "points": 25000},
+      {"max_distance": 1000, "points": 35000},
+      {"max_distance": 1500, "points": 45000},
+      {"max_distance": 3000, "points": 60000},
+      {"max_distance": 99999, "points": 80000}
+    ]
+  }
+}

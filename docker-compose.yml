@@ -1,0 +1,50 @@
+# Local-build compose file. Use this for development on the NAS:
+#   docker compose up -d --build
+#
+# For production (pull from GHCR + auto-update with Watchtower), use:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  web:
+    build: .
+    image: ghcr.io/kushrp/autopoints:latest
+    container_name: autopoints-web
+    ports:
+      - "8000:8000"
+    volumes:
+      - autopoints-data:/data
+    env_file:
+      - .env
+    environment:
+      AUTOPOINTS_CACHE_PATH: /data/cache.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3).status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  discord:
+    build: .
+    image: ghcr.io/kushrp/autopoints:latest
+    container_name: autopoints-discord
+    command: ["python", "-m", "autopoints.discord_bot.server"]
+    volumes:
+      - autopoints-data:/data
+    env_file:
+      - .env
+    environment:
+      AUTOPOINTS_CACHE_PATH: /data/cache.db
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+volumes:
+  autopoints-data:
+    name: autopoints-data

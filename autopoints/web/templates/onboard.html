@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>autopoints — setup</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/onboard.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="logo">autopoints</h1>
+      <p class="tagline">cash vs. points, ranked by cents-per-point</p>
+    </div>
+  </header>
+
+  <main class="container wizard">
+    <nav class="wizard-progress" aria-label="Setup progress">
+      <ol class="wizard-progress-list">
+        <li class="wizard-progress-step" data-step="1"><span class="wizard-progress-dot">1</span><span class="wizard-progress-label">Welcome</span></li>
+        <li class="wizard-progress-step" data-step="2"><span class="wizard-progress-dot">2</span><span class="wizard-progress-label">Services</span></li>
+        <li class="wizard-progress-step" data-step="3"><span class="wizard-progress-dot">3</span><span class="wizard-progress-label">Cash data</span></li>
+        <li class="wizard-progress-step" data-step="4"><span class="wizard-progress-dot">4</span><span class="wizard-progress-label">Discord</span></li>
+        <li class="wizard-progress-step" data-step="5"><span class="wizard-progress-dot">5</span><span class="wizard-progress-label">Watchlists</span></li>
+        <li class="wizard-progress-step" data-step="6"><span class="wizard-progress-dot">6</span><span class="wizard-progress-label">Done</span></li>
+      </ol>
+    </nav>
+
+    <!-- Step 1: Welcome -->
+    <section class="card wizard-step" data-step="1" aria-labelledby="step1-heading">
+      <header class="results-header">
+        <h2 id="step1-heading">Welcome to autopoints</h2>
+        <p class="muted">
+          autopoints helps you decide when to burn miles vs. pay cash. It pulls cash fares
+          and award availability across major programs, normalizes everything to cents-per-point,
+          and tells you whether a redemption is worth it. This wizard sets up credentials,
+          optional Discord notifications, and saved searches.
+        </p>
+      </header>
+
+      <fieldset class="wizard-radio-cards" role="radiogroup" aria-labelledby="step1-heading">
+        <label class="wizard-card-option">
+          <input type="radio" name="mode" value="local" />
+          <span class="wizard-card-option-body">
+            <span class="wizard-card-option-title">Set up for local development</span>
+            <span class="wizard-card-option-desc">Run autopoints from your terminal with <code>uvicorn</code>. We'll generate a <code>.env</code> file only.</span>
+          </span>
+        </label>
+        <label class="wizard-card-option">
+          <input type="radio" name="mode" value="nas" />
+          <span class="wizard-card-option-body">
+            <span class="wizard-card-option-title">Set up for NAS Docker deployment</span>
+            <span class="wizard-card-option-desc">Deploy to a Synology, Unraid, or any Docker host. We'll generate both a <code>.env</code> and a <code>docker-compose.yml</code>.</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <p class="wizard-error" data-step-error="1" role="alert" aria-live="polite"></p>
+
+      <div class="wizard-actions">
+        <span></span>
+        <button type="button" class="wizard-next" data-next="2" disabled>Continue</button>
+      </div>
+    </section>
+
+    <!-- Step 2: Services -->
+    <section class="card wizard-step" data-step="2" hidden aria-labelledby="step2-heading">
+      <header class="results-header">
+        <h2 id="step2-heading">Which services do you want?</h2>
+        <p class="muted">Pick the pieces you'll actually use. You can change this later by editing your <code>.env</code> file.</p>
+      </header>
+
+      <div class="wizard-checkbox-list">
+        <label class="wizard-check">
+          <input type="checkbox" name="service-web" checked />
+          <span class="wizard-check-body">
+            <span class="wizard-check-title">Web UI + API</span>
+            <span class="wizard-check-desc">The browser interface for ad-hoc searches and the JSON API.</span>
+          </span>
+        </label>
+
+        <label class="wizard-check">
+          <input type="checkbox" name="service-discord" />
+          <span class="wizard-check-body">
+            <span class="wizard-check-title">Discord bot</span>
+            <span class="wizard-check-desc">Run <code>/search</code> and <code>/watchlist</code> commands from any server.</span>
+          </span>
+        </label>
+
+        <label class="wizard-check" data-requires="service-discord">
+          <input type="checkbox" name="service-autoruns" disabled />
+          <span class="wizard-check-body">
+            <span class="wizard-check-title">Watchlist auto-runs</span>
+            <span class="wizard-check-desc" data-disabled-help>Enable the Discord bot first. Auto-runs post channel notifications when a watchlist beats its threshold.</span>
+            <span class="wizard-check-desc" data-enabled-help hidden>Automatically scan saved searches on an interval and notify a channel when a redemption beats its threshold.</span>
+          </span>
+        </label>
+      </div>
+
+      <p class="wizard-error" data-step-error="2" role="alert" aria-live="polite"></p>
+
+      <div class="wizard-actions">
+        <button type="button" class="wizard-back" data-back="1">Back</button>
+        <button type="button" class="wizard-next" data-next="3" disabled>Continue</button>
+      </div>
+    </section>
+
+    <!-- Step 3: Cash data -->
+    <section class="card wizard-step" data-step="3" hidden aria-labelledby="step3-heading">
+      <header class="results-header">
+        <h2 id="step3-heading">How should we get cash flight prices?</h2>
+        <p class="muted">Cash prices anchor the cents-per-point math. Demo mode works fine for evaluating autopoints.</p>
+      </header>
+
+      <fieldset class="wizard-radio-cards" role="radiogroup" aria-labelledby="step3-heading">
+        <label class="wizard-card-option">
+          <input type="radio" name="cash-source" value="demo" />
+          <span class="wizard-card-option-body">
+            <span class="wizard-card-option-title">Demo mode</span>
+            <span class="wizard-card-option-desc">No key needed. Synthetic prices. Great for trying out autopoints.</span>
+          </span>
+        </label>
+        <label class="wizard-card-option">
+          <input type="radio" name="cash-source" value="amadeus" />
+          <span class="wizard-card-option-body">
+            <span class="wizard-card-option-title">Amadeus Self-Service</span>
+            <span class="wizard-card-option-desc">Free 2,000 requests/month. Real cash fares from a global GDS.</span>
+          </span>
+        </label>
+      </fieldset>
+
+      <div class="wizard-conditional" data-show-when="cash-source=amadeus" hidden>
+        <div class="form-grid">
+          <label class="field">
+            <span>Client ID</span>
+            <input type="text" name="amadeus_client_id" autocomplete="off" />
+          </label>
+          <label class="field">
+            <span>Client secret</span>
+            <input type="password" name="amadeus_client_secret" autocomplete="new-password" />
+          </label>
+          <label class="field">
+            <span>Hostname</span>
+            <select name="amadeus_hostname">
+              <option value="test" selected>test</option>
+              <option value="production">production</option>
+            </select>
+          </label>
+        </div>
+
+        <p class="wizard-hint">
+          <a href="https://developers.amadeus.com" target="_blank" rel="noopener noreferrer">Get free credentials at developers.amadeus.com</a>
+        </p>
+
+        <div class="wizard-test-row">
+          <button type="button" class="wizard-test-btn" data-test="amadeus">Test connection</button>
+          <span class="wizard-status" data-status="amadeus" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <p class="wizard-error" data-step-error="3" role="alert" aria-live="polite"></p>
+
+      <div class="wizard-actions">
+        <button type="button" class="wizard-back" data-back="2">Back</button>
+        <button type="button" class="wizard-next" data-next="4" disabled>Continue</button>
+      </div>
+    </section>
+
+    <!-- Step 4: Discord -->
+    <section class="card wizard-step" data-step="4" hidden aria-labelledby="step4-heading">
+      <header class="results-header">
+        <h2 id="step4-heading">Set up the Discord bot</h2>
+        <p class="muted">Create a bot application, copy the token here, and test it.</p>
+      </header>
+
+      <div class="wizard-form-stack">
+        <label class="field">
+          <span>DISCORD_BOT_TOKEN <em class="hint">required</em></span>
+          <input type="password" name="discord_token" autocomplete="new-password" />
+        </label>
+
+        <label class="field">
+          <span>
+            DISCORD_GUILD_ID <em class="hint">optional</em>
+            <button type="button" class="wizard-help" aria-label="What is a guild ID?"
+              data-tooltip="Right-click your server &rarr; Copy ID. Lets the bot register slash commands instantly instead of waiting up to an hour.">?</button>
+          </span>
+          <input type="text" name="discord_guild_id" inputmode="numeric" pattern="[0-9]*" />
+        </label>
+
+        <label class="field" data-show-when="service-autoruns" hidden>
+          <span>DISCORD_NOTIFY_CHANNEL_ID <em class="hint">channel that receives auto-run alerts</em></span>
+          <input type="text" name="discord_notify_channel_id" inputmode="numeric" pattern="[0-9]*" />
+        </label>
+
+        <label class="field" data-show-when="service-autoruns" hidden>
+          <span>DISCORD_RUN_INTERVAL_MINUTES — <output name="discord_interval_output">60</output> min</span>
+          <input type="range" name="discord_run_interval" min="15" max="360" step="5" value="60" />
+        </label>
+
+        <label class="wizard-check">
+          <input type="checkbox" name="discord_demo_mode" />
+          <span class="wizard-check-body">
+            <span class="wizard-check-title">Force demo mode</span>
+            <span class="wizard-check-desc">Bot always returns synthetic data, ignoring Amadeus or live scrapers.</span>
+          </span>
+        </label>
+      </div>
+
+      <div class="wizard-test-row">
+        <button type="button" class="wizard-test-btn" data-test="discord">Test connection</button>
+        <span class="wizard-status" data-status="discord" aria-live="polite"></span>
+      </div>
+
+      <p class="wizard-hint">
+        <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Create a bot at discord.com/developers/applications</a>
+        — then invite it to your server with the <code>bot</code> + <code>applications.commands</code> scopes and at minimum "Send Messages" + "Use Slash Commands" permissions.
+      </p>
+
+      <p class="wizard-error" data-step-error="4" role="alert" aria-live="polite"></p>
+
+      <div class="wizard-actions">
+        <button type="button" class="wizard-back" data-back="3">Back</button>
+        <button type="button" class="wizard-next" data-next="5" disabled>Continue</button>
+      </div>
+    </section>
+
+    <!-- Step 5: Watchlist seed -->
+    <section class="card wizard-step" data-step="5" hidden aria-labelledby="step5-heading">
+      <header class="results-header">
+        <h2 id="step5-heading">Want to start with some saved searches?</h2>
+        <p class="muted">Skip this if you'd rather add them later from the main UI.</p>
+      </header>
+
+      <div class="wizard-template-row">
+        <button type="button" class="wizard-template-btn" data-template="holiday">Holiday flights from home</button>
+        <button type="button" class="wizard-template-btn" data-template="custom">Custom</button>
+        <button type="button" class="wizard-template-btn wizard-skip-btn" data-template="skip">Skip</button>
+      </div>
+
+      <div class="wizard-conditional" data-show-template="holiday" hidden>
+        <div class="form-grid">
+          <label class="field">
+            <span>Home airport (IATA)</span>
+            <input type="text" name="holiday_origin" maxlength="3" pattern="[A-Za-z]{3}" placeholder="JFK" />
+          </label>
+        </div>
+        <div class="wizard-test-row">
+          <button type="button" class="wizard-template-add" data-template-add="holiday">Add holiday templates</button>
+        </div>
+      </div>
+
+      <div class="wizard-conditional" data-show-template="custom" hidden>
+        <div class="form-grid">
+          <label class="field">
+            <span>Origin</span>
+            <input type="text" name="custom_origin" maxlength="3" pattern="[A-Za-z]{3}" />
+          </label>
+          <label class="field">
+            <span>Destination</span>
+            <input type="text" name="custom_destination" maxlength="3" pattern="[A-Za-z]{3}" />
+          </label>
+          <label class="field">
+            <span>Depart date</span>
+            <input type="date" name="custom_depart_date" />
+          </label>
+          <label class="field">
+            <span>± days</span>
+            <input type="number" name="custom_window_days" min="0" max="7" value="3" />
+          </label>
+          <label class="field">
+            <span>Cabin</span>
+            <select name="custom_cabin">
+              <option value="economy">economy</option>
+              <option value="premium_economy">premium economy</option>
+              <option value="business">business</option>
+              <option value="first">first</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Passengers</span>
+            <input type="number" name="custom_passengers" min="1" max="9" value="1" />
+          </label>
+          <label class="field">
+            <span>Threshold CPP</span>
+            <input type="number" name="custom_threshold_cpp" min="0.1" max="20" step="0.1" value="2.0" />
+          </label>
+          <label class="field">
+            <span>Label</span>
+            <input type="text" name="custom_label" placeholder="Holiday" />
+          </label>
+        </div>
+        <div class="wizard-test-row">
+          <button type="button" class="wizard-template-add" data-template-add="custom">Add to list</button>
+        </div>
+      </div>
+
+      <div class="wizard-staged" data-staged-empty>
+        <p class="muted">No watchlists staged yet.</p>
+      </div>
+      <ul class="wizard-staged-list" data-staged-list></ul>
+
+      <p class="wizard-error" data-step-error="5" role="alert" aria-live="polite"></p>
+
+      <div class="wizard-actions">
+        <button type="button" class="wizard-back" data-back="4">Back</button>
+        <button type="button" class="wizard-next" data-next="6">Continue</button>
+      </div>
+    </section>
+
+    <!-- Step 6: Done -->
+    <section class="card wizard-step" data-step="6" hidden aria-labelledby="step6-heading">
+      <header class="results-header">
+        <h2 id="step6-heading">You're all set.</h2>
+        <p class="muted">Copy these into your project, then start autopoints.</p>
+      </header>
+
+      <div class="wizard-tabs" role="tablist">
+        <button type="button" class="wizard-tab is-active" role="tab" aria-selected="true" data-tab="env">.env</button>
+        <button type="button" class="wizard-tab" role="tab" aria-selected="false" data-tab="compose" data-mode-only="nas">docker-compose.yml</button>
+      </div>
+
+      <div class="wizard-tab-panel is-active" role="tabpanel" data-tab-panel="env">
+        <div class="wizard-codeblock-actions">
+          <button type="button" class="wizard-copy" data-copy-target="env-output">Copy</button>
+          <button type="button" class="wizard-download" data-download-target="env-output" data-filename=".env">Download</button>
+        </div>
+        <pre class="wizard-codeblock" data-output="env-output"><code></code></pre>
+      </div>
+
+      <div class="wizard-tab-panel" role="tabpanel" data-tab-panel="compose" hidden>
+        <div class="wizard-codeblock-actions">
+          <button type="button" class="wizard-copy" data-copy-target="compose-output">Copy</button>
+          <button type="button" class="wizard-download" data-download-target="compose-output" data-filename="docker-compose.yml">Download</button>
+        </div>
+        <pre class="wizard-codeblock" data-output="compose-output"><code></code></pre>
+      </div>
+
+      <p class="wizard-error" data-step-error="6" role="alert" aria-live="polite"></p>
+
+      <div class="wizard-done-actions">
+        <button type="button" class="wizard-primary" data-action="finish">Start using autopoints</button>
+        <a class="wizard-secondary" href="/docs/DEPLOY.md" target="_blank" rel="noopener noreferrer">Read the deploy guide</a>
+        <button type="button" class="wizard-secondary" data-action="rerun">Re-run wizard</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/onboard.js"></script>
+</body>
+</html>

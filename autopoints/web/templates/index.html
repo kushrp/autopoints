@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>autopoints</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script id="programs-data" type="application/json">{{ programs | tojson | safe }}</script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1 class="logo">autopoints</h1>
+      <p class="tagline">cash vs. points, ranked by cents-per-point</p>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card form-card">
+      <form id="search-form" autocomplete="off">
+        <div class="form-grid">
+          <label class="field">
+            <span>Origin</span>
+            <input type="text" name="origin" id="origin" value="JFK" maxlength="3" required pattern="[A-Za-z]{3}" />
+          </label>
+
+          <label class="field">
+            <span>Destination</span>
+            <input type="text" name="destination" id="destination" value="PHX" maxlength="3" required pattern="[A-Za-z]{3}" />
+          </label>
+
+          <label class="field">
+            <span>Depart date</span>
+            <input type="date" name="depart_date" id="depart_date" required />
+          </label>
+
+          <label class="field">
+            <span>± days</span>
+            <input type="number" name="window_days" id="window_days" min="0" max="7" value="2" required />
+          </label>
+
+          <label class="field">
+            <span>Cabin</span>
+            <select name="cabin" id="cabin">
+              <option value="economy">economy</option>
+              <option value="premium_economy">premium economy</option>
+              <option value="business">business</option>
+              <option value="first">first</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Passengers</span>
+            <input type="number" name="passengers" id="passengers" min="1" max="9" value="1" required />
+          </label>
+        </div>
+
+        <div class="form-toggles">
+          <label class="checkbox">
+            <input type="checkbox" name="demo" id="demo" checked />
+            <span>Use demo data</span>
+          </label>
+
+          <label class="checkbox">
+            <input type="checkbox" name="live_aeroplan" id="live_aeroplan" />
+            <span>
+              Live Aeroplan
+              <em class="hint">may be bot-blocked</em>
+            </span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" id="submit-btn">Search</button>
+        </div>
+      </form>
+    </section>
+
+    <div id="banners"></div>
+
+    <section id="results-section" class="card hidden">
+      <header class="results-header">
+        <h2 id="results-title"></h2>
+        <p id="results-subtitle" class="muted"></p>
+      </header>
+
+      <div id="results-table-wrapper">
+        <table id="results-table">
+          <thead>
+            <tr>
+              <th data-sort="transfer_program">Transfer</th>
+              <th data-sort="points_program">Program</th>
+              <th data-sort="date">Date</th>
+              <th data-sort="carrier">Carrier</th>
+              <th data-sort="points_required" class="num">Points</th>
+              <th data-sort="effective_points_required" class="num">Effective pts</th>
+              <th data-sort="taxes_cents" class="num">Taxes</th>
+              <th data-sort="cash_cents" class="num">Cash</th>
+              <th data-sort="cpp" class="num">CPP</th>
+              <th data-sort="effective_cpp" class="num">Effective CPP</th>
+              <th data-sort="verdict">Verdict</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+        <p id="empty-state" class="empty hidden">No redemptions found.</p>
+      </div>
+    </section>
+
+    <section id="heatmap-section" class="card hidden">
+      <header class="results-header">
+        <h2>Date heatmap</h2>
+        <p class="muted">Best effective CPP per program per date.</p>
+      </header>
+      <div id="heatmap"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -8,16 +8,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from autopoints.cache.store import TTLCache
-from autopoints.config import settings
-from autopoints.providers.aeroplan import AeroplanProvider
-from autopoints.providers.amadeus import AmadeusProvider
-from autopoints.providers.base import ProviderError
-from autopoints.providers.static_charts import StaticChartProvider
+from autopoints.cli.watchlist import app as watchlist_app
+from autopoints.search.build import BuildOptions, build_orchestrator
 from autopoints.search.models import Cabin, SearchRequest
-from autopoints.search.orchestrator import Orchestrator, SearchOutcome
+from autopoints.search.orchestrator import SearchOutcome
 
 app = typer.Typer(add_completion=False, help="autopoints — cash vs. award CPP engine.")
+app.add_typer(watchlist_app, name="watchlist")
 console = Console()
 
 
@@ -35,6 +32,10 @@ def search(
     cabin: Annotated[Cabin, typer.Option(help="Cabin class")] = Cabin.economy,
     passengers: Annotated[int, typer.Option(help="Number of adult passengers")] = 1,
     refresh: Annotated[bool, typer.Option("--refresh", help="Bypass cache")] = False,
+    demo: Annotated[
+        bool,
+        typer.Option("--demo", help="Use synthetic cash data (no Amadeus key needed)."),
+    ] = False,
     use_live_aeroplan: Annotated[
         bool,
         typer.Option(
@@ -53,36 +54,13 @@ def search(
         passengers=passengers,
     )
 
-    cash_providers = []
-    if settings.amadeus_client_id and settings.amadeus_client_secret:
-        cash_providers.append(
-            AmadeusProvider(
-                settings.amadeus_client_id,
-                settings.amadeus_client_secret,
-                settings.amadeus_hostname,
-            )
-        )
-    else:
-        console.print("[yellow]warning:[/yellow] Amadeus credentials not set; no cash data.")
-
-    award_providers = []
-    if use_live_aeroplan:
-        award_providers.append(AeroplanProvider())
-    try:
-        award_providers.append(StaticChartProvider("AC"))
-    except ProviderError as e:
-        console.print(f"[yellow]warning:[/yellow] {e}")
-
-    orch = Orchestrator(
-        cash_providers=cash_providers,
-        award_providers=award_providers,
-        cache=TTLCache(settings.cache_path()),
-        cpp_great=settings.autopoints_cpp_great,
-        cpp_good=settings.autopoints_cpp_good,
-        force_refresh=refresh,
+    built = build_orchestrator(
+        BuildOptions(demo=demo, use_live_aeroplan=use_live_aeroplan, force_refresh=refresh)
     )
+    for w in built.warnings:
+        console.print(f"[yellow]warning:[/yellow] {w}")
 
-    outcome = asyncio.run(orch.run(request))
+    outcome = asyncio.run(built.orchestrator.run(request))
     _render(outcome)
 
 
