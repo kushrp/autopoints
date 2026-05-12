@@ -1,0 +1,12 @@
+name: ping
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo
+        run: echo "hello from $(uname -a)"
