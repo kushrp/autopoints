@@ -29,24 +29,14 @@ rediscovery (§7) proves otherwise.
 From `lib/ba_rewards.rb` L9-14:
 
 - **Base URL**: `http://dev1-flightavail-avios.bitnamiapp.com:8080/flight-availability-ws`
-  (note: port 8080, plain HTTP, not HTTPS).
-- **Path**: `/departure/cities/{from}/destination/{to}`
-- **Method**: `GET`
-- **Query params**:
-  - `obDate` — outbound date, formatted `DDMMYYYY` (e.g. `01072026`). The
-    2015-04-08 commit "Start results from today by formatting the date correctly
-    for the Avios API" pinned this format.
-  - `cabinClass` — single capital letter: `E` / `P` / `B` / `F` (first letter of
-    `economy/premium/business/first`, see L7-9).
-  - `sc` — booking-class bucket: `X` (economy), `P` (premium economy),
-    `U` (business), `Z` (first), from `cabin_class_to_sc_mapping` L55-62.
-- **Body**: none (GET).
-- **Headers**: only HTTParty defaults — `User-Agent`, `Accept`. No `X-Api-Key`,
-  no `X-Device-Id`, no signed payload, no URL-encoded JSON.
-- **Required**: `from`, `to`, `cabinClass`, `sc`, `obDate`. **No** return date
-  param, **no** passenger count — `number_of_seats` (L6, default 1) is applied
-  client-side post-response.
-- **Encoding quirks**: none — URL path/query, no signing.
+  (port 8080, plain HTTP).
+- **Path / method**: `GET /departure/cities/{from}/destination/{to}`.
+- **Query params** (all required; no body):
+  - `obDate` — outbound date, `DDMMYYYY` (commit `6750ebf` pinned this).
+  - `cabinClass` — single capital letter `E` / `P` / `B` / `F`.
+  - `sc` — booking-class bucket `X` / `P` / `U` / `Z` (L55-62).
+- **Headers**: HTTParty defaults only — no `X-Api-Key`, no `X-Device-Id`, no signing.
+- **Absent**: return date, passenger count (`number_of_seats` is client-side filter).
 
 Critical mismatch with autopoints' model: the endpoint is not "flights between O/D
 on date X" — it's "cheapest Avios for O→D, plus which dates in next 12 months have
@@ -56,33 +46,24 @@ on date X" — it's "cheapest Avios for O→D, plus which dates in next 12 month
 
 ## 3. Response shape
 
-Inferred from how `lib/ba_rewards.rb` and `lib/ba_rewards/result.rb` consume it
-(no fixture is checked into the repo). Top-level JSON keys:
+Inferred from how `ba_rewards.rb` / `result.rb` consume it — no fixture is checked
+in. Top-level JSON keys:
 
-- `cityName` — destination city as string (L20).
-- `countryName` — country string (L21).
-- `regionName` — region string (L22), e.g. zone for chart pricing.
-- `prices` — object containing:
-  - `rfs` — Reward Flight Saver indicator, treated as a number; `> 0` means
-    the route is RFS-eligible (`result.rb` `reward_flight_saver?` L5).
-  - `prices.A` — the *return* Avios price for the default cabin (L27).
-    Note: only the `"A"` key is read; other keys likely exist for other cabins
-    or one-way pricing but `ba_rewards` doesn't expose them.
-- `out` — array of per-date availability rows (L43-47). Each row has:
-  - `d` — date as a `Date.parse`-able string (likely ISO).
-  - `bs` — integer seat count available at the Avios price.
+- `cityName`, `countryName`, `regionName` — destination metadata strings (L20-22).
+- `prices.rfs` — Reward Flight Saver flag, numeric; `> 0` ⇒ RFS-eligible
+  (`result.rb` L5).
+- `prices.prices.A` — the *return* Avios price (L27). Only the `"A"` key is
+  consumed; other keys may exist for one-way / per-cabin variants.
+- `out[]` — per-date availability rows (L43-47): `d` (date string) and
+  `bs` (seat count at the Avios price).
 
-No per-flight fields exist (no carrier code, no flight number, no times, no
-fare basis, no taxes). The endpoint reports *availability per day* and a single
-*Avios price for the whole route*. Taxes/fees are absent. Stops are absent.
+**No per-flight fields**: no carrier, flight number, times, fare basis, taxes,
+or stops. The endpoint reports *availability per day* + one *route-level Avios
+price*.
 
-**Currency / units**: `avios_price` is reported in Avios. Cash taxes are not
-returned by this endpoint at all.
-
-**Error responses**: `ba_rewards` treats anything non-200 as
-`BARewardsException("The server responded with an error.")` (L41) and any
-parse error as `BARewardsException("The response couldn't be parsed...")`
-(L37). The real shape of error bodies is undocumented.
+**Errors**: non-200 → `BARewardsException("The server responded with an error.")`
+(L41); JSON parse failure → `BARewardsException("The response couldn't be
+parsed...")` (L37). Real error-body shape is undocumented.
 
 ---
 
