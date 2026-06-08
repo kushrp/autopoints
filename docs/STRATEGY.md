@@ -52,18 +52,22 @@ Be honest:
 2. **The iOS API trick.** BA exposes a clean, undocumented JSON API via its Avios Flight Finder iOS app. Port `timrogers/ba_rewards` to Python; ship as the second live provider. This is the single highest-leverage move available.
 3. **Stale-availability re-verify.** Before any watchlist alert fires, re-hit the source for that specific (date, cabin, program). If it disappeared, suppress. Closes the pointsyeah complaint about phantom seats.
 4. **Virgin Atlantic.** Uncontested. The community ran `vseats.io` for years as a human-driven daily scrape. A small program with low churn — sweet spot for a hobbyist.
-5. **Skip United / Delta / AA direct.** Dynamic pricing means the value is noisier and the bot-defense layer is brutal. Partner redemptions via AC + BA + VS already cover most of their flights anyway.
+5. **Direct-program coverage is on the roadmap, shipped incrementally with evidence at each step.** Cover the user's held programs (Alaska, AA, Delta, JetBlue) over time. **Alaska ships first in v0** — lightest backend, hand-rolled Playwright via Browserbase, partner sweet spots. **AA and Delta are candidates**, gated on a 30-min Stagehand probe against PerimeterX (AA) and Akamai (Delta). Until the probe succeeds and AA's logged-in/MFA flow is scoped, AA and Delta direct stay deferred. JetBlue follows Alaska once the base class extraction is justified. **United stays out** (no direct membership; partner pricing via Aeroplan covers most United routes). **Hand-rolled Playwright remains the default**; Stagehand is a candidate, not a strategic commitment. *Updated 2026-06-07 — original position to skip all dynamic-pricing direct programs revised after ce-doc-review surfaced both the schema-migration scope and the Stagehand unproven-against-PerimeterX risk.*
+
+   **Revert path:** If Browserbase becomes unavailable or unaffordable, AA and Delta direct revert to "skip" per the original strategy. Alaska + JetBlue can fall back to direct Playwright with a residential proxy if needed. The roadmap addition is reversible.
 
 ## The build order
 
 | # | Slice | Effort | Why now |
 |---|---|---|---|
-| 1 | NAS deployment | 1d | The product can't be useful if it's not always-on. |
-| 2 | Onboarding wizard | 1–2d | Setup friction is what kills hobbyist projects. |
-| 3 | BA Avios live (iOS API) | 1–2d | Biggest data-coverage win for the least scraping risk. |
-| 4 | Stale-availability re-verifier | 2d | Distinguishes our alerts from pointsyeah's. |
-| 5 | Virgin Atlantic live | 2–4d | Uncontested, fills the third major chart provider with live data. |
-| 6 | Quarterly refresh process | recurring | Valuations, transfer bonuses, chart drift. Calendar reminder + a single script. |
+| 1 | NAS deployment | 1d | The product can't be useful if it's not always-on. ✅ done |
+| 2 | Onboarding wizard | 1–2d | Setup friction is what kills hobbyist projects. ✅ done |
+| 3 | **v0 foundational sprint** (this brief: `docs/brainstorms/2026-06-07-points-redemption-sprint-requirements.md`, revised after ce-doc-review) | 1d sequential | Google Flights cash provider (replaces dying Amadeus) + schema migration for arrival-time + Alaska direct provider + CLI arrival-time filter. Sunday flight booking decoupled via manual checks. |
+| 4 | BA Avios live (iOS API port) | 1–2d | Biggest data-coverage win on the partner side, still highest-leverage. Schedule immediately after v0. |
+| 4.5 | AA + Delta direct (gated on Stagehand probe) | 2–3d | Only if 30-min probe succeeds + AA logged-in/MFA flow scoped. Otherwise stays deferred. |
+| 5 | Stale-availability re-verifier | 2d | Distinguishes our alerts from pointsyeah's. |
+| 6 | Virgin Atlantic live | 2–4d | Uncontested, fills the third major chart provider with live data. |
+| 7 | Quarterly refresh process | recurring | Valuations, transfer bonuses, chart drift. Calendar reminder + a single script. |
 
 Anything not on this list is deferred indefinitely.
 
@@ -80,7 +84,9 @@ Anything not on this list is deferred indefinitely.
 | Item | Cost |
 |---|---|
 | NAS hardware (already owned) | $0 |
-| Amadeus Self-Service free tier (2k/mo) | $0 |
+| Amadeus Self-Service (decommissioned 2026-07-17) | $0 → N/A |
+| Google Flights via Browserbase (replacement cash source) | included in Browserbase subscription |
+| Browserbase subscription (user-held) | already paid |
 | GHCR public image hosting | $0 |
 | Domain / public hosting | $0 (LAN + Discord only) |
 | Optional residential proxy if IP-banned | ~$10/mo, postpone |
