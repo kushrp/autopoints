@@ -133,9 +133,17 @@ async def check_google_flights_redeye_lax_jfk() -> CheckOutcome:
 
 
 async def check_orchestrator_arrive_before_demo() -> CheckOutcome:
-    """Exercise the full orchestrator path with --arrive-before. Synthetic
-    providers, but proves the wiring (cache, demo cash, static charts,
-    filter, CPP build) still runs end-to-end."""
+    """Exercise the full orchestrator path with and without --arrive-before.
+
+    Pass criteria (per the v0.1 forcing-function gate in docs/ROADMAP.md):
+    - Unfiltered run produces at least one redemption (proves wiring works)
+    - Filtered run produces STRICTLY FEWER redemptions than unfiltered
+      (proves --arrive-before fires; the filter could legitimately wipe to
+      zero when the demo's cheapest cash arrives after the cutoff)
+
+    The failure mode is: filtered_count == unfiltered_count — meaning the
+    filter silently didn't apply.
+    """
     name = "orchestrator_arrive_before_demo"
     started = time.perf_counter()
     try:
@@ -145,35 +153,39 @@ async def check_orchestrator_arrive_before_demo() -> CheckOutcome:
         from autopoints.search.build import BuildOptions, build_orchestrator
         from autopoints.search.models import SearchRequest
 
-        built = build_orchestrator(BuildOptions(demo=True))
-        # Use an isolated tempfile cache so the check doesn't depend on (or
-        # pollute) the user's ~/.autopoints/cache.db state. TTLCache wants a
-        # real Path; sqlite handles per-process creation fine.
-        tmp = Path(tempfile.mkdtemp(prefix="autopoints-livecheck-")) / "cache.db"
-        built.orchestrator.cache = TTLCache(tmp)
-        req = SearchRequest(
-            origin="JFK",
-            destination="LAX",
-            depart_date=date.today() + timedelta(days=14),
-            window_days=1,
-            arrive_before_local="08:00ET",
-        )
-        outcome = await built.orchestrator.run(req)
-        if not outcome.redemptions:
-            raise AssertionError("no redemptions returned from demo orchestrator")
-        best = outcome.best_per_program()
-        if not best:
-            raise AssertionError("best_per_program empty")
-        # Spot-check filter behavior: any kept redemption with arrival
-        # time-of-day populated must land before 08:00 ET on the arrival day.
-        # Chart-floor offers (no time fields) pass through the filter.
+        # Two orchestrator runs: one unfiltered, one with --arrive-before.
+        # Each gets its own isolated tempfile cache.
+        async def _run(arrive_before: str | None) -> int:
+            built = build_orchestrator(BuildOptions(demo=True))
+            tmp = Path(tempfile.mkdtemp(prefix="autopoints-livecheck-")) / "cache.db"
+            built.orchestrator.cache = TTLCache(tmp)
+            req = SearchRequest(
+                origin="JFK",
+                destination="LAX",
+                depart_date=date.today() + timedelta(days=14),
+                window_days=1,
+                arrive_before_local=arrive_before,
+            )
+            outcome = await built.orchestrator.run(req)
+            return len(outcome.redemptions)
+
+        unfiltered = await _run(None)
+        filtered = await _run("08:00ET")
+
+        if unfiltered == 0:
+            raise AssertionError(
+                "demo orchestrator returned 0 redemptions unfiltered — wiring broken"
+            )
+        if filtered >= unfiltered:
+            raise AssertionError(
+                f"--arrive-before filter did not fire: "
+                f"filtered={filtered} >= unfiltered={unfiltered}"
+            )
         return _pass(
             name,
             started,
-            f"{len(outcome.redemptions)} redemptions, "
-            f"{len(best)} best-per-program, "
-            f"top {best[0].transfer_program}→{best[0].points_program} "
-            f"{best[0].effective_cpp:.2f}¢",
+            f"filter fired: unfiltered={unfiltered}, filtered={filtered} "
+            f"({unfiltered - filtered} dropped)",
         )
     except Exception as e:
         return _fail(name, started, e)
