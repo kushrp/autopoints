@@ -38,8 +38,13 @@ _SEAT_TYPE_MAP_NAMES = {
 class GoogleFlightsProvider(CashProvider):
     name = "google_flights"
 
-    def __init__(self, top_n: int = 20) -> None:
+    def __init__(self, top_n: int = 20, retries: int = 1) -> None:
+        # `retries=1` = one extra attempt after the initial failure, two total.
+        # fli has flaked ~20% of calls in real use (intermittent 0-result
+        # returns and ConnectionError from curl_cffi), and a single in-process
+        # retry recovers most of them. Set retries=0 to disable.
         self._top_n = top_n
+        self._retries = retries
 
     async def search(
         self,
@@ -49,23 +54,52 @@ class GoogleFlightsProvider(CashProvider):
         cabin: Cabin,
         passengers: int = 1,
     ) -> list[FlightOffer]:
-        try:
-            results = await asyncio.to_thread(
-                _search_sync, origin, destination, depart_date, cabin, passengers, self._top_n
-            )
-        except ProviderError:
-            raise
-        except Exception as e:  # noqa: BLE001 — fli wraps several network/parse exceptions
-            # Log the full traceback before wrapping into the typed error so a
-            # persistent fli failure is visible in operator logs, not just in
-            # one terse outcome.warnings line.
-            logger.exception(
-                "fli search failed for %s -> %s on %s",
-                origin,
-                destination,
-                depart_date.isoformat(),
-            )
-            raise ProviderError(f"google_flights: fli search failed: {e}") from e
+        last_exc: Exception | None = None
+        for attempt in range(self._retries + 1):
+            try:
+                results = await asyncio.to_thread(
+                    _search_sync,
+                    origin,
+                    destination,
+                    depart_date,
+                    cabin,
+                    passengers,
+                    self._top_n,
+                )
+                break
+            except ProviderError as e:
+                last_exc = e
+                if attempt < self._retries:
+                    logger.warning(
+                        "fli search failed (attempt %d/%d), retrying: %s",
+                        attempt + 1,
+                        self._retries + 1,
+                        e,
+                    )
+                    continue
+                raise
+            except Exception as e:  # noqa: BLE001 — fli wraps several network/parse exceptions
+                last_exc = e
+                if attempt < self._retries:
+                    logger.warning(
+                        "fli search failed (attempt %d/%d), retrying: %s",
+                        attempt + 1,
+                        self._retries + 1,
+                        e,
+                    )
+                    continue
+                logger.exception(
+                    "fli search failed for %s -> %s on %s",
+                    origin,
+                    destination,
+                    depart_date.isoformat(),
+                )
+                raise ProviderError(f"google_flights: fli search failed: {e}") from e
+        else:
+            # Defensive: loop exhausted without break or raise.
+            raise ProviderError(
+                f"google_flights: fli search failed: {last_exc}"
+            ) from last_exc
 
         if results is None:
             return []

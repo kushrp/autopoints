@@ -29,6 +29,10 @@ dependencies = [
 scrape = [
     "curl-cffi>=0.7",
 ]
+browserbase = [
+    "browserbase>=1.12",
+    "playwright>=1.45",
+]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
