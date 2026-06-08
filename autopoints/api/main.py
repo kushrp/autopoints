@@ -202,6 +202,7 @@ def _watchlist_to_view(wl: Watchlist) -> WatchlistView:
         threshold_cpp=wl.threshold_cpp,
         label=wl.label,
         created_at=wl.created_at,
+        arrive_before_local=wl.arrive_before_local,
     )
 
 

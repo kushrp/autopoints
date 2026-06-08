@@ -69,6 +69,10 @@ class WatchlistView(BaseModel):
     threshold_cpp: float
     label: str | None
     created_at: float
+    arrive_before_local: str | None = None
+    """Persisted filter set via `autopoints watchlist add --arrive-before`.
+    Returned for API parity so agents can see what filter the watchlist will
+    apply at run time. CLI-side write of this field is deferred to phase 2."""
 
 
 class WatchlistHitView(BaseModel):

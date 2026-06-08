@@ -195,13 +195,8 @@ class WatchlistStore:
 
 
 def _row_to_watchlist(row: sqlite3.Row) -> Watchlist:
-    # `arrive_before_local` is sourced via dict-style indexing so the migration
-    # column is read even when the row originated before the migration ran
-    # (sqlite3.Row supports missing-column tolerance via try/except below).
-    try:
-        arrive_before_local = row["arrive_before_local"]
-    except IndexError:
-        arrive_before_local = None
+    # `arrive_before_local` is always present: WatchlistStore.__init__ runs the
+    # idempotent ADD COLUMN migration before any read can happen.
     return Watchlist(
         id=row["id"],
         origin=row["origin"],
@@ -213,7 +208,7 @@ def _row_to_watchlist(row: sqlite3.Row) -> Watchlist:
         threshold_cpp=row["threshold_cpp"],
         label=row["label"],
         created_at=row["created_at"],
-        arrive_before_local=arrive_before_local,
+        arrive_before_local=row["arrive_before_local"],
     )
 
 

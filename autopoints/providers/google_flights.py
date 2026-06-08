@@ -35,7 +35,7 @@ _SEAT_TYPE_MAP_NAMES = {
 class GoogleFlightsProvider(CashProvider):
     name = "google_flights"
 
-    def __init__(self, top_n: int = 20):
+    def __init__(self, top_n: int = 20) -> None:
         self._top_n = top_n
 
     async def search(

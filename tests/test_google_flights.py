@@ -9,6 +9,7 @@ the live path; they're excluded by default `addopts = "-m 'not e2e'"`.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import date, datetime, time
 from types import SimpleNamespace
 from typing import Any
@@ -34,12 +35,17 @@ def _leg(
     )
 
 
-def _result(price: float, legs: list[SimpleNamespace], duration: int, stops: int) -> SimpleNamespace:
+def _result(
+    price: float, legs: list[SimpleNamespace], duration: int, stops: int
+) -> SimpleNamespace:
     return SimpleNamespace(price=price, legs=legs, duration=duration, stops=stops)
 
 
+PatchSearch = Callable[[Any], None]
+
+
 @pytest.fixture()
-def patch_search(monkeypatch: pytest.MonkeyPatch):
+def patch_search(monkeypatch: pytest.MonkeyPatch) -> PatchSearch:
     def _patch(results: Any) -> None:
         def fake(*_a: Any, **_kw: Any) -> Any:
             return results
@@ -49,7 +55,7 @@ def patch_search(monkeypatch: pytest.MonkeyPatch):
     return _patch
 
 
-def test_nonstop_redeye_maps_to_flight_offer(patch_search) -> None:
+def test_nonstop_redeye_maps_to_flight_offer(patch_search: PatchSearch) -> None:
     """B6 1024 LAX 22:25 → JFK 07:13 next day, $409 — the validated probe case."""
     legs = [
         _leg(
@@ -78,7 +84,7 @@ def test_nonstop_redeye_maps_to_flight_offer(patch_search) -> None:
     assert o.arrival_date == date(2026, 6, 15)
 
 
-def test_multi_leg_uses_first_leg_departure_last_leg_arrival(patch_search) -> None:
+def test_multi_leg_uses_first_leg_departure_last_leg_arrival(patch_search: PatchSearch) -> None:
     """AA 1362+1587 LAX → PHX → JFK, two legs concatenated."""
     legs = [
         _leg("AA", 1362, datetime(2026, 6, 14, 19, 30), datetime(2026, 6, 14, 21, 3)),
@@ -100,7 +106,7 @@ def test_multi_leg_uses_first_leg_departure_last_leg_arrival(patch_search) -> No
     assert o.arrival_date == date(2026, 6, 15)
 
 
-def test_empty_results_returns_empty_list(patch_search) -> None:
+def test_empty_results_returns_empty_list(patch_search: PatchSearch) -> None:
     patch_search([])
     offers = asyncio.run(
         gf.GoogleFlightsProvider().search("LAX", "JFK", date(2026, 6, 14), Cabin.economy)
@@ -108,7 +114,7 @@ def test_empty_results_returns_empty_list(patch_search) -> None:
     assert offers == []
 
 
-def test_none_results_returns_empty_list(patch_search) -> None:
+def test_none_results_returns_empty_list(patch_search: PatchSearch) -> None:
     """fli returns None when no flights match."""
     patch_search(None)
     offers = asyncio.run(
@@ -117,7 +123,7 @@ def test_none_results_returns_empty_list(patch_search) -> None:
     assert offers == []
 
 
-def test_round_trip_tuples_are_skipped(patch_search) -> None:
+def test_round_trip_tuples_are_skipped(patch_search: PatchSearch) -> None:
     """Round-trip results come back as tuples; one-way path skips them."""
     legs = [_leg("DL", 960, datetime(2026, 6, 14, 21, 10), datetime(2026, 6, 15, 5, 25))]
     patch_search([(_result(539.0, legs, 315, 0), _result(539.0, legs, 315, 0))])
@@ -127,7 +133,7 @@ def test_round_trip_tuples_are_skipped(patch_search) -> None:
     assert offers == []
 
 
-def test_malformed_row_is_skipped_not_raised(patch_search) -> None:
+def test_malformed_row_is_skipped_not_raised(patch_search: PatchSearch) -> None:
     """Parser drops unparseable rows without breaking the rest of the batch."""
     bad = SimpleNamespace(price=None, legs=[])  # missing/bad price + empty legs
     good_legs = [_leg("UA", 4, datetime(2026, 6, 14, 21, 30), datetime(2026, 6, 15, 5, 55))]
@@ -142,7 +148,7 @@ def test_malformed_row_is_skipped_not_raised(patch_search) -> None:
     assert offers[0].cash_cents == 19900
 
 
-def test_upstream_exception_wraps_to_provider_error(monkeypatch) -> None:
+def test_upstream_exception_wraps_to_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """Any non-ProviderError exception from _search_sync wraps to ProviderError."""
     def boom(*_a: Any, **_kw: Any) -> Any:
         raise RuntimeError("fli crashed")
@@ -155,7 +161,7 @@ def test_upstream_exception_wraps_to_provider_error(monkeypatch) -> None:
     assert "google_flights" in str(exc.value)
 
 
-def test_provider_error_passes_through(monkeypatch) -> None:
+def test_provider_error_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
     """ProviderError raised from _search_sync (e.g. missing fli install) is not re-wrapped."""
     def missing(*_a: Any, **_kw: Any) -> Any:
         raise ProviderError("google_flights: `flights` package not installed.")

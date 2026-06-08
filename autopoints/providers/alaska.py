@@ -53,6 +53,8 @@ class AlaskaProvider(AwardProvider):
         async with self._search_semaphore:
             raise ProviderError(
                 "alaska: provider skeleton — selector-discovery spike pending. "
-                "Run scripts/spike_alaska.py against a live Browserbase session "
-                "and encode the discovered selectors. See plan U4 Execution Note."
+                "See plan U4 Execution Note in "
+                "docs/plans/2026-06-07-001-feat-points-redemption-v0-sprint-plan.md "
+                "— selector discovery is a one-off interactive task; reference "
+                "script is intentionally not committed."
             )
