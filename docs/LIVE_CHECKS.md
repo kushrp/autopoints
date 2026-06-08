@@ -48,14 +48,21 @@ What the live check is really validating is the **handshake before** Kasada:
 3. Market-token endpoint accepting the signed request
 
 If any of those three steps regressed, the `ProviderError` would mention
-*Cognito* or *market-token* or *SigV4*, not Kasada. The check passes only
-when the error string contains `Kasada` or `429` — proof the handshake
-reached the bot-blocked layer.
+*Cognito* or *botocore* or *DNS*, not Kasada. The check passes only when the
+error string contains `Kasada` or `429` — proof the handshake reached the
+bot-blocked layer.
 
-If Kasada is ever disabled or the path changes, the check still passes but
-the detail line says `no Kasada block — got N offers (investigate)`. That's
-a green light worth looking at: it means the v1.c-2 Browserbase rewrite may
-no longer be needed.
+Possible non-Kasada failure modes worth investigating when they trip:
+
+- `market-token returned 403` ("explicit deny in an identity-based policy") —
+  the unauth Cognito identity got revoked or the SigV4 policy tightened;
+  the handshake is still wired correctly but the IAM layer changed.
+- `no Kasada block — got N offers` — Kasada lifted (or the v1.c-2
+  Browserbase path is in play); the v1.c-2 rewrite may no longer be needed.
+
+Both of those currently FAIL the check by design — they're real signals
+that something on Air Canada's side changed and the provider needs an
+operator look.
 
 ## Setting secrets in GitHub
 

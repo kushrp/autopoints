@@ -7,7 +7,13 @@ FROM python:3.11-slim AS builder
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
 WORKDIR /build
 
-# Install build essentials only if needed (httpx[http2] pulls h2/hpack pure-Python; no native deps)
+# git is required because pyproject.toml declares `flights @ git+https://github.com/punitarani/fli.git@main`
+# (PEP 508 direct URL). The PyPI `flights` namespace points at an unrelated
+# package, so we install fli from its GitHub source — pip needs git to clone.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml .
 COPY autopoints autopoints
 RUN pip install --target=/install ".[discord]"
