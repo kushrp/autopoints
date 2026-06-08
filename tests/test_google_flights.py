@@ -163,9 +163,14 @@ def test_upstream_exception_wraps_to_provider_error(
                 gf.GoogleFlightsProvider().search("LAX", "JFK", date(2026, 6, 14), Cabin.economy)
             )
     assert "google_flights" in str(exc.value)
-    # logger.exception emits at ERROR with the traceback attached.
+    # logger.exception emits at ERROR with the traceback attached. Asserting
+    # exc_info pins the .exception() call over .error() — a mutation to
+    # logger.error would still pass the level check but lose the traceback.
     records = [r for r in caplog.records if r.name == "autopoints.providers.google_flights"]
-    assert any(r.levelname == "ERROR" and "fli search failed" in r.message for r in records)
+    assert any(
+        r.levelname == "ERROR" and "fli search failed" in r.message and r.exc_info is not None
+        for r in records
+    )
 
 
 def test_provider_error_passes_through(

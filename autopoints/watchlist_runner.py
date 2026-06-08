@@ -73,7 +73,10 @@ async def run_all(
     )
     results: list[WatchlistRunResult] = []
     for wl, entry in zip(watchlists, raw):
-        if isinstance(entry, BaseException):
+        # `isinstance(Exception)` mirrors orchestrator.run's pattern and lets
+        # asyncio.CancelledError (BaseException subclass) propagate, so the
+        # Discord bot's long-lived watchlist loop can shut down cleanly.
+        if isinstance(entry, Exception):
             results.append(
                 WatchlistRunResult(
                     watchlist=wl,

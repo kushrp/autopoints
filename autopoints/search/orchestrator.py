@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from autopoints.cache.store import TTLCache
 from autopoints.pricing.cpp import build_redemption
@@ -225,12 +225,20 @@ def _offer_arrival_dt(
     """Resolve an offer's arrival to an absolute datetime in its own dest_tz.
 
     Returns None when the offer carries no time-of-day fields (chart-floor
-    case). Falls back to `filter_tz` when `offer.dest_tz` is absent, which
-    preserves back-compat for fixtures that don't populate dest_tz.
+    case). Falls back to `filter_tz` when `offer.dest_tz` is absent OR when
+    it names a TZ that ZoneInfo can't resolve (e.g., a corrupted cached blob).
+    The fallback keeps the filter operational rather than letting an
+    unresolvable TZ name crash `Orchestrator.run`.
     """
     if offer.arrival_time is None or offer.arrival_date is None:
         return None
-    offer_tz = ZoneInfo(offer.dest_tz) if offer.dest_tz else filter_tz
+    if offer.dest_tz:
+        try:
+            offer_tz = ZoneInfo(offer.dest_tz)
+        except ZoneInfoNotFoundError:
+            offer_tz = filter_tz
+    else:
+        offer_tz = filter_tz
     return datetime.combine(offer.arrival_date, offer.arrival_time, tzinfo=offer_tz)
 
 
