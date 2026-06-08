@@ -192,22 +192,35 @@ async def check_orchestrator_arrive_before_demo() -> CheckOutcome:
 
 
 async def check_aeroplan_handshake_reaches_air_bounds() -> CheckOutcome:
-    """Run a live AeroplanProvider.search and EXPECT a Kasada block.
+    """Run a live AeroplanProvider.search via Browserbase (v1.c-2 path) and
+    EXPECT either real data or a 429 Kasada block.
 
-    PASS criterion: the raised ProviderError mentions "Kasada" — proving
-    Cognito identity exchange, SigV4 signing, and market-token POST all
-    succeeded and the failure happened at the bot-management layer. FAIL
-    criterion: any other ProviderError (the handshake regressed), or no
-    error at all (Kasada was unexpectedly disabled — worth investigating).
+    The non-Browserbase path is documented-broken (IAM denies our
+    auto-minted anonymous IdentityId at the market-token resource — see
+    docs/probes/v1c-aeroplan-identity-refresh.md), so we don't bother
+    testing it. This check is now the gate for the v1.c-2 Browserbase work.
+
+    PASS criteria:
+      - Got >=1 offer back (the full handshake works end-to-end), or
+      - Failed with a 429/Kasada-coded message (Kasada won round-trip,
+        meaning AC is detecting the session as bot — actionable signal).
+    FAIL criteria:
+      - 403 IAM denial (v1.c-2 fundamentally broken — the SigV4-from-our-
+        side approach can't authorize against AC's policies). Means we
+        need v1.c-3 to fully delegate the request to the browser session.
+      - Any other unexpected error.
     """
     name = "aeroplan_handshake_reaches_air_bounds"
     started = time.perf_counter()
+    missing = _missing("BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID")
+    if missing:
+        return _skip(name, missing, started)
     try:
         from autopoints.providers.aeroplan import AeroplanProvider
         from autopoints.providers.base import ProviderError
         from autopoints.search.models import Cabin
 
-        provider = AeroplanProvider()
+        provider = AeroplanProvider(use_browserbase=True)
         try:
             offers = await provider.search(
                 "YYZ", "LHR", date.today() + timedelta(days=60), Cabin.business
@@ -218,20 +231,21 @@ async def check_aeroplan_handshake_reaches_air_bounds() -> CheckOutcome:
                 return _pass(
                     name,
                     started,
-                    "v1.c-1 wiring correct, Kasada-blocked as expected "
-                    f"({msg[:120]}...)",
+                    f"Kasada-blocked at endpoint (expected fallback): {msg[:120]}",
+                )
+            if "explicit deny" in msg or "403" in msg:
+                raise AssertionError(
+                    "v1.c-2 IAM regression: AC denies our auto-minted anonymous "
+                    f"identity at the market-token resource. v1.c-3 needs to "
+                    f"delegate request authorization to the browser session. {msg[:200]}"
                 )
             raise AssertionError(
-                f"handshake regression: error did not mention Kasada/429: {msg}"
+                f"handshake regression: unexpected error: {msg[:200]}"
             )
-        # No error: either Kasada was disabled, or we got real data — both
-        # are interesting. Surface as PASS with a note so the operator
-        # notices (a green check that says "Kasada gone?" is the right signal).
         return _pass(
             name,
             started,
-            f"no Kasada block — got {len(offers)} offers (investigate: "
-            "Kasada disabled or path changed)",
+            f"Browserbase + auto-mint handshake works end-to-end: {len(offers)} offers",
         )
     except Exception as e:
         return _fail(name, started, e)
