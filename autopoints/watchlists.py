@@ -31,6 +31,7 @@ class Watchlist:
     threshold_cpp: float
     created_at: float
     label: str | None = None
+    arrive_before_local: str | None = None
 
     def to_search_request(self) -> SearchRequest:
         return SearchRequest(
@@ -40,6 +41,7 @@ class Watchlist:
             window_days=self.window_days,
             cabin=self.cabin,
             passengers=self.passengers,
+            arrive_before_local=self.arrive_before_local,
         )
 
 
@@ -58,12 +60,23 @@ class WatchlistRunResult:
 
 
 def _signature(r: RedemptionResult) -> str:
-    """Identity for diffing: same redemption row across runs collapses to one key."""
-    return (
+    """Identity for diffing: same redemption row across runs collapses to one key.
+
+    Arrival time is appended only when populated so existing rows in
+    `watchlist_seen` (written before the schema migration) retain their identity.
+    Two distinct redeyes on the same date with different arrival times produce
+    different signatures only after providers start populating `arrival_time`.
+    """
+    base = (
         f"{r.transfer_program}|{r.points_program}|{r.award_offer.depart_date.isoformat()}"
         f"|{r.award_offer.cabin.value}|{r.award_offer.operating_carrier}"
         f"|{r.points_required}"
     )
+    arr_time = r.award_offer.arrival_time
+    arr_date = r.award_offer.arrival_date
+    if arr_time is not None and arr_date is not None:
+        return f"{base}|{arr_date.isoformat()}T{arr_time.isoformat()}"
+    return base
 
 
 class WatchlistStore:
@@ -82,7 +95,8 @@ class WatchlistStore:
                 "passengers INTEGER NOT NULL, "
                 "threshold_cpp REAL NOT NULL, "
                 "label TEXT, "
-                "created_at REAL NOT NULL)"
+                "created_at REAL NOT NULL, "
+                "arrive_before_local TEXT)"
             )
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS watchlist_seen ("
@@ -91,10 +105,15 @@ class WatchlistStore:
                 "first_seen_at REAL NOT NULL, "
                 "PRIMARY KEY (watchlist_id, signature))"
             )
+            # Idempotent migration for pre-existing databases that lack the column.
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(watchlists)").fetchall()}
+            if "arrive_before_local" not in existing:
+                conn.execute("ALTER TABLE watchlists ADD COLUMN arrive_before_local TEXT")
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.path)
+        conn.row_factory = sqlite3.Row
         try:
             yield conn
             conn.commit()
@@ -111,6 +130,7 @@ class WatchlistStore:
         passengers: int,
         threshold_cpp: float,
         label: str | None = None,
+        arrive_before_local: str | None = None,
     ) -> Watchlist:
         wl = Watchlist(
             id=uuid.uuid4().hex[:8],
@@ -123,14 +143,18 @@ class WatchlistStore:
             threshold_cpp=threshold_cpp,
             created_at=time.time(),
             label=label,
+            arrive_before_local=arrive_before_local,
         )
         with self._conn() as conn:
             conn.execute(
-                "INSERT INTO watchlists VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO watchlists ("
+                "id, origin, destination, depart_date, window_days, cabin, "
+                "passengers, threshold_cpp, label, created_at, arrive_before_local"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     wl.id, wl.origin, wl.destination, wl.depart_date.isoformat(),
                     wl.window_days, wl.cabin.value, wl.passengers, wl.threshold_cpp,
-                    wl.label, wl.created_at,
+                    wl.label, wl.created_at, wl.arrive_before_local,
                 ),
             )
         return wl
@@ -170,18 +194,26 @@ class WatchlistStore:
             )
 
 
-def _row_to_watchlist(row: tuple) -> Watchlist:
+def _row_to_watchlist(row: sqlite3.Row) -> Watchlist:
+    # `arrive_before_local` is sourced via dict-style indexing so the migration
+    # column is read even when the row originated before the migration ran
+    # (sqlite3.Row supports missing-column tolerance via try/except below).
+    try:
+        arrive_before_local = row["arrive_before_local"]
+    except IndexError:
+        arrive_before_local = None
     return Watchlist(
-        id=row[0],
-        origin=row[1],
-        destination=row[2],
-        depart_date=date.fromisoformat(row[3]),
-        window_days=row[4],
-        cabin=Cabin(row[5]),
-        passengers=row[6],
-        threshold_cpp=row[7],
-        label=row[8],
-        created_at=row[9],
+        id=row["id"],
+        origin=row["origin"],
+        destination=row["destination"],
+        depart_date=date.fromisoformat(row["depart_date"]),
+        window_days=row["window_days"],
+        cabin=Cabin(row["cabin"]),
+        passengers=row["passengers"],
+        threshold_cpp=row["threshold_cpp"],
+        label=row["label"],
+        created_at=row["created_at"],
+        arrive_before_local=arrive_before_local,
     )
 
 
