@@ -10,7 +10,7 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import pytest
 
@@ -58,6 +58,11 @@ def live_server() -> Iterator[str]:
     )
     try:
         _wait_for_server(f"{base}/api/health")
+        # `/` redirects to `/onboard` on a fresh install. The browser test
+        # exercises the search SPA directly, so drop the onboard sentinel
+        # before the test navigates. Isolated AUTOPOINTS_CACHE_PATH means
+        # this doesn't leak into other runs.
+        urlopen(Request(f"{base}/api/onboard/complete", method="POST"), timeout=5).read()
         yield base
     finally:
         proc.terminate()
