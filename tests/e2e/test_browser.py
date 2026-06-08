@@ -83,9 +83,10 @@ def test_search_flow_end_to_end(browser_page) -> None:
     results.wait_for(state="visible", timeout=10_000)
     assert "hidden" not in (results.get_attribute("class") or "")
 
-    # g) At least one row
+    # g) At least one row. `wait_for` is strict-mode; use .first to avoid
+    # rejection when the demo data yields multiple result rows.
     rows = page.locator("#results-tbody tr.result-row")
-    rows.wait_for(state="visible", timeout=5_000)
+    rows.first.wait_for(state="visible", timeout=5_000)
     row_count = rows.count()
     assert row_count >= 1, f"expected >=1 redemption row, got {row_count}"
 
