@@ -13,13 +13,6 @@
       discord: false,
       autoruns: false,
     },
-    amadeus: {
-      source: null, // 'demo' | 'amadeus'
-      client_id: '',
-      client_secret: '',
-      hostname: 'test',
-      tested_ok: false,
-    },
     discord: {
       token: '',
       guild_id: '',
@@ -42,7 +35,6 @@
       const parsed = JSON.parse(raw);
       return Object.assign(defaultState(), parsed, {
         services: Object.assign(defaultState().services, parsed.services || {}),
-        amadeus: Object.assign(defaultState().amadeus, parsed.amadeus || {}),
         discord: Object.assign(defaultState().discord, parsed.discord || {}),
         step5: Object.assign(defaultState().step5, parsed.step5 || {}),
         watchlists: Array.isArray(parsed.watchlists) ? parsed.watchlists : [],
@@ -183,11 +175,9 @@
         return ok;
       }
       case 3: {
-        const ok =
-          state.amadeus.source === 'demo' ||
-          (state.amadeus.source === 'amadeus' && state.amadeus.tested_ok);
-        setNextEnabled(3, ok);
-        return ok;
+        // Cash prices come from Google Flights automatically — nothing to configure.
+        setNextEnabled(3, true);
+        return true;
       }
       case 4: {
         const ok = state.discord.tested_ok;
@@ -263,46 +253,6 @@
   });
 
   syncStep2Inputs();
-
-  // ===== Step 3: cash data =====
-
-  const amadeusInputs = {
-    client_id: $('input[name="amadeus_client_id"]'),
-    client_secret: $('input[name="amadeus_client_secret"]'),
-    hostname: $('select[name="amadeus_hostname"]'),
-  };
-  const cashConditional = $('[data-show-when="cash-source=amadeus"]');
-
-  function syncStep3() {
-    $$('input[name="cash-source"]').forEach((r) => {
-      r.checked = r.value === state.amadeus.source;
-    });
-    if (cashConditional) cashConditional.hidden = state.amadeus.source !== 'amadeus';
-    amadeusInputs.client_id.value = state.amadeus.client_id || '';
-    amadeusInputs.client_secret.value = state.amadeus.client_secret || '';
-    amadeusInputs.hostname.value = state.amadeus.hostname || 'test';
-    setStatus('amadeus', state.amadeus.tested_ok ? 'ok' : null, state.amadeus.tested_ok ? 'Connection OK' : '');
-  }
-
-  $$('input[name="cash-source"]').forEach((r) => {
-    r.addEventListener('change', () => {
-      state.amadeus.source = r.value;
-      if (r.value !== 'amadeus') state.amadeus.tested_ok = false;
-      saveState();
-      syncStep3();
-      validateStep(3);
-    });
-  });
-
-  Object.entries(amadeusInputs).forEach(([key, input]) => {
-    input.addEventListener('input', () => {
-      state.amadeus[key] = input.value.trim();
-      state.amadeus.tested_ok = false;
-      setStatus('amadeus', null, '');
-      saveState();
-      validateStep(3);
-    });
-  });
 
   // ===== Step 4: Discord =====
 
@@ -411,48 +361,9 @@
   $$('.wizard-test-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const which = btn.dataset.test;
-      if (which === 'amadeus') return runAmadeusTest(btn);
       if (which === 'discord') return runDiscordTest(btn);
     });
   });
-
-  function runAmadeusTest(btn) {
-    setStatus('amadeus', null, '');
-    if (!state.amadeus.client_id || !state.amadeus.client_secret) {
-      setStatus('amadeus', 'err', 'Enter client ID and secret first.');
-      return;
-    }
-    return withSpinner(btn, async () => {
-      try {
-        const res = await fetch('/api/onboard/test/amadeus', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            client_id: state.amadeus.client_id,
-            client_secret: state.amadeus.client_secret,
-            hostname: state.amadeus.hostname,
-          }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.ok) {
-          state.amadeus.tested_ok = true;
-          saveState();
-          setStatus('amadeus', 'ok', 'Connection OK');
-          validateStep(3);
-        } else {
-          state.amadeus.tested_ok = false;
-          saveState();
-          setStatus('amadeus', 'err', data.error || `HTTP ${res.status}`);
-          validateStep(3);
-        }
-      } catch (err) {
-        state.amadeus.tested_ok = false;
-        saveState();
-        setStatus('amadeus', 'err', (err && err.message) || 'Network error');
-        validateStep(3);
-      }
-    });
-  }
 
   function runDiscordTest(btn) {
     setStatus('discord', null, '');
@@ -688,12 +599,6 @@
     const payload = {
       mode: state.mode,
       services,
-      amadeus: {
-        enabled: state.amadeus.source === 'amadeus',
-        client_id: state.amadeus.client_id || '',
-        client_secret: state.amadeus.client_secret || '',
-        hostname: state.amadeus.hostname || 'test',
-      },
       discord: {
         enabled: !!state.services.discord,
         token: state.discord.token || '',
@@ -833,7 +738,6 @@
 
   // ===== On-load init: hydrate UI from state =====
 
-  syncStep3();
   syncStep4();
   syncStep4Visibility();
   if (state.step5.activeTemplate) setActiveTemplate(state.step5.activeTemplate);

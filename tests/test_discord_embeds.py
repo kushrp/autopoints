@@ -83,10 +83,10 @@ def test_search_embed_renders_route_and_metadata():
 
 
 def test_search_embed_appends_warnings():
-    e = search_results_embed("JFK", "PHX", "2026-06-15", 0, "economy", [_redemption()], ["amadeus down"])
+    e = search_results_embed("JFK", "PHX", "2026-06-15", 0, "economy", [_redemption()], ["google_flights down"])
     warning_field = e["fields"][-1]
     assert "Warnings" in warning_field["name"]
-    assert "amadeus down" in warning_field["value"]
+    assert "google_flights down" in warning_field["value"]
 
 
 def test_watchlist_list_embed_empty():
