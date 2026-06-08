@@ -18,8 +18,17 @@ from autopoints.search.orchestrator import (
 class _StubCash(CashProvider):
     name = "stub_cash"
 
-    def __init__(self, cents: int = 18000):
+    def __init__(
+        self,
+        cents: int = 18000,
+        arrival_time: time | None = None,
+        arrival_date: date | None = None,
+        dest_tz: str | None = None,
+    ):
         self.cents = cents
+        self.arrival_time = arrival_time
+        self.arrival_date = arrival_date
+        self.dest_tz = dest_tz
         self.calls = 0
 
     async def search(self, origin, destination, depart_date, cabin, passengers=1):
@@ -34,6 +43,9 @@ class _StubCash(CashProvider):
                 carrier="UA",
                 flight_numbers=["UA100"],
                 cash_cents=self.cents,
+                arrival_time=self.arrival_time,
+                arrival_date=self.arrival_date,
+                dest_tz=self.dest_tz,
             )
         ]
 
@@ -249,6 +261,71 @@ async def test_arrive_before_keeps_chart_floor_results_without_times(cache: TTLC
         origin="LAX", destination="JFK",
         depart_date=date(2026, 6, 14), cabin=Cabin.economy,
         arrive_before_local="06:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert len(out.redemptions) == 1
+
+
+async def test_arrive_before_uses_cash_arrival_when_award_has_no_times(cache: TTLCache):
+    """Chart-floor award (no times) + cash with arrival_time populated. Filter
+    should fire against the cash side instead of passing through silently."""
+    cash = _StubCash(
+        cents=30_000,
+        arrival_time=time(9, 30),
+        arrival_date=date(2026, 6, 15),
+        dest_tz="America/New_York",
+    )
+    award = _StubAward()  # no time fields, chart-floor analog
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert out.redemptions == []
+
+
+async def test_arrive_before_keeps_when_cash_arrives_early_and_award_unset(cache: TTLCache):
+    """Forcing-function scenario: cash arrives 05:25 ET 6/15, no award times.
+    Filter '08:00ET' keeps the redemption."""
+    cash = _StubCash(
+        cents=30_000,
+        arrival_time=time(5, 25),
+        arrival_date=date(2026, 6, 15),
+        dest_tz="America/New_York",
+    )
+    award = _StubAward()
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert len(out.redemptions) == 1
+
+
+async def test_arrive_before_uses_earlier_of_award_and_cash_when_both_set(cache: TTLCache):
+    """Award arrives 09:30 ET (would drop), cash arrives 07:13 ET (would keep).
+    Using min() keeps the redemption — the user can still take the earlier of
+    the two."""
+    cash = _StubCash(
+        cents=30_000,
+        arrival_time=time(7, 13),
+        arrival_date=date(2026, 6, 15),
+        dest_tz="America/New_York",
+    )
+    award = _StubAward(
+        arrival_time=time(9, 30),
+        arrival_date=date(2026, 6, 15),
+        dest_tz="America/New_York",
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
     )
     out = await orch.run(req, transfer_currencies=["UR"])
     assert len(out.redemptions) == 1
