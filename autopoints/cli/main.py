@@ -34,17 +34,37 @@ def search(
     refresh: Annotated[bool, typer.Option("--refresh", help="Bypass cache")] = False,
     demo: Annotated[
         bool,
-        typer.Option("--demo", help="Use synthetic cash data (no Amadeus key needed)."),
+        typer.Option("--demo", help="Use synthetic cash data (no live providers called)."),
     ] = False,
     use_live_aeroplan: Annotated[
         bool,
         typer.Option(
             "--live-aeroplan/--no-live-aeroplan",
-            help="Hit Aeroplan's live award-search endpoint (may be bot-blocked).",
+            help="(deprecated) Hit Aeroplan's live award-search endpoint. "
+            "Default off; the endpoint hostname returns NXDOMAIN. Left in place "
+            "for phase-2 repair.",
         ),
     ] = False,
+    arrive_before: Annotated[
+        str | None,
+        typer.Option(
+            "--arrive-before",
+            help="Filter to flights arriving before HH:MM<TZ>, e.g. '08:00ET'. "
+            "Accepted TZs: ET, CT, MT, PT, AKT, HT. Applied post-rank against "
+            "live results; chart-floor results (no time data) always pass.",
+        ),
+    ] = None,
 ) -> None:
     """Search a route and print a CPP-ranked redemption table."""
+    if arrive_before is not None:
+        # Fail fast at the CLI on a bad spec rather than surfacing it as a
+        # post-rank warning. Same parser as the orchestrator uses internally.
+        from autopoints.search.orchestrator import ArriveBeforeParseError, parse_arrive_before
+        try:
+            parse_arrive_before(arrive_before)
+        except ArriveBeforeParseError as e:
+            raise typer.BadParameter(str(e)) from e
+
     request = SearchRequest(
         origin=origin,
         destination=destination,
@@ -52,6 +72,7 @@ def search(
         window_days=window,
         cabin=cabin,
         passengers=passengers,
+        arrive_before_local=arrive_before,
     )
 
     built = build_orchestrator(

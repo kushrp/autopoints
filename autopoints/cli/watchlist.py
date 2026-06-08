@@ -26,8 +26,23 @@ def add(
     passengers: Annotated[int, typer.Option(help="Adult passengers")] = 1,
     threshold: Annotated[float, typer.Option(help="Min effective CPP to flag")] = 1.8,
     label: Annotated[str | None, typer.Option(help="Friendly name for this search")] = None,
+    arrive_before: Annotated[
+        str | None,
+        typer.Option(
+            "--arrive-before",
+            help="Persisted filter: only flag results arriving before HH:MM<TZ> "
+            "(e.g. '08:00ET'). Accepted TZs: ET, CT, MT, PT, AKT, HT.",
+        ),
+    ] = None,
 ) -> None:
     """Add a saved search."""
+    if arrive_before is not None:
+        from autopoints.search.orchestrator import ArriveBeforeParseError, parse_arrive_before
+        try:
+            parse_arrive_before(arrive_before)
+        except ArriveBeforeParseError as e:
+            raise typer.BadParameter(str(e)) from e
+
     store = store_for_settings()
     wl = store.add(
         origin=origin,
@@ -38,11 +53,13 @@ def add(
         passengers=passengers,
         threshold_cpp=threshold,
         label=label,
+        arrive_before_local=arrive_before,
     )
+    extra = f" arrive_before={wl.arrive_before_local}" if wl.arrive_before_local else ""
     console.print(
         f"added watchlist [bold]{wl.id}[/bold]: "
         f"{wl.origin}→{wl.destination} {wl.depart_date} ±{wl.window_days}d "
-        f"{wl.cabin.value} threshold={wl.threshold_cpp}cpp"
+        f"{wl.cabin.value} threshold={wl.threshold_cpp}cpp{extra}"
     )
 
 

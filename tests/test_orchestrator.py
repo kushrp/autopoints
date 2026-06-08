@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 
 import pytest
@@ -8,7 +8,11 @@ import pytest
 from autopoints.cache.store import TTLCache
 from autopoints.providers.base import AwardProvider, CashProvider, ProviderError
 from autopoints.search.models import AwardOffer, Cabin, FlightOffer, SearchRequest
-from autopoints.search.orchestrator import Orchestrator
+from autopoints.search.orchestrator import (
+    ArriveBeforeParseError,
+    Orchestrator,
+    parse_arrive_before,
+)
 
 
 class _StubCash(CashProvider):
@@ -38,8 +42,17 @@ class _StubAward(AwardProvider):
     name = "stub_award"
     program_code = "AC"
 
-    def __init__(self, points: int = 12500):
+    def __init__(
+        self,
+        points: int = 12500,
+        arrival_time: time | None = None,
+        arrival_date: date | None = None,
+        dest_tz: str | None = None,
+    ):
         self.points = points
+        self.arrival_time = arrival_time
+        self.arrival_date = arrival_date
+        self.dest_tz = dest_tz
         self.calls = 0
 
     async def search(self, origin, destination, depart_date, cabin, passengers=1):
@@ -54,6 +67,9 @@ class _StubAward(AwardProvider):
                 cabin=cabin,
                 points=self.points,
                 taxes_cents=560,
+                arrival_time=self.arrival_time,
+                arrival_date=self.arrival_date,
+                dest_tz=self.dest_tz,
             )
         ]
 
@@ -130,6 +146,89 @@ async def test_orchestrator_award_failure_does_not_kill_search(cache: TTLCache):
     assert len(out.award_offers) == 0
     assert len(out.warnings) == 1
     assert "simulated failure" in out.warnings[0]
+
+
+async def test_arrive_before_drops_late_arrivals(cache: TTLCache):
+    cash = _StubCash(cents=30000)
+    award = _StubAward(
+        arrival_time=time(9, 30),
+        arrival_date=date(2026, 6, 15),
+        dest_tz="America/New_York",
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert out.redemptions == []
+
+
+async def test_arrive_before_keeps_early_arrivals(cache: TTLCache):
+    cash = _StubCash(cents=30000)
+    award = _StubAward(
+        arrival_time=time(7, 13),  # JetBlue Mint case
+        arrival_date=date(2026, 6, 15),
+        dest_tz="America/New_York",
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert len(out.redemptions) == 1
+
+
+async def test_arrive_before_keeps_chart_floor_results_without_times(cache: TTLCache):
+    """Chart-floor providers populate no time fields; filter must keep them."""
+    cash = _StubCash(cents=30000)
+    award = _StubAward()  # no arrival fields — mimics StaticChartProvider output
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="06:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert len(out.redemptions) == 1
+
+
+async def test_arrive_before_unparseable_spec_warns_instead_of_failing(cache: TTLCache):
+    cash = _StubCash(cents=30000)
+    award = _StubAward(
+        arrival_time=time(7, 13),
+        arrival_date=date(2026, 6, 15),
+        dest_tz="America/New_York",
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="25:00ET",  # invalid HH
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    # Filter is skipped and the redemption survives; warning records the parse failure.
+    assert len(out.redemptions) == 1
+    assert any("arrive-before" in w for w in out.warnings)
+
+
+def test_parse_arrive_before_aliases() -> None:
+    wall, tz = parse_arrive_before("08:00ET")
+    assert wall == time(8, 0)
+    assert str(tz) == "America/New_York"
+
+    wall, tz = parse_arrive_before("14:30PT")
+    assert wall == time(14, 30)
+    assert str(tz) == "America/Los_Angeles"
+
+
+def test_parse_arrive_before_rejects_bad_input() -> None:
+    for bad in ("", "08:00", "8ET", "08:00XX", "25:00ET", "08:60ET"):
+        with pytest.raises(ArriveBeforeParseError):
+            parse_arrive_before(bad)
 
 
 async def test_orchestrator_date_window_expands_searches(cache: TTLCache):
