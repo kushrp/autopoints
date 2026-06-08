@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from autopoints.cache.store import TTLCache
 from autopoints.config import Settings, settings as default_settings
 from autopoints.providers.aeroplan import AeroplanProvider
+from autopoints.providers.alaska import AlaskaProvider
 from autopoints.providers.base import AwardProvider, CashProvider, ProviderError
 from autopoints.providers.demo import DemoCashProvider
 from autopoints.providers.google_flights import GoogleFlightsProvider
@@ -22,6 +23,7 @@ SUPPORTED_CHART_PROGRAMS: tuple[str, ...] = ("AC", "BA", "VS")
 class BuildOptions:
     demo: bool = False
     use_live_aeroplan: bool = False
+    use_live_alaska: bool = False
     force_refresh: bool = False
 
 
@@ -46,6 +48,8 @@ def build_orchestrator(opts: BuildOptions, settings: Settings = default_settings
     award_providers: list[AwardProvider] = []
     if opts.use_live_aeroplan:
         award_providers.append(AeroplanProvider())
+    if opts.use_live_alaska:
+        award_providers.append(AlaskaProvider())
     for code in SUPPORTED_CHART_PROGRAMS:
         try:
             award_providers.append(StaticChartProvider(code))

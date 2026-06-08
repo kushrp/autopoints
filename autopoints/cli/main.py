@@ -45,6 +45,16 @@ def search(
             "for phase-2 repair.",
         ),
     ] = False,
+    use_live_alaska: Annotated[
+        bool,
+        typer.Option(
+            "--live-alaska/--no-live-alaska",
+            help="Include Alaska Mileage Plan (Atmos) live award search. "
+            "Requires BROWSERBASE_API_KEY + BROWSERBASE_PROJECT_ID in .env. "
+            "v0: provider skeleton — raises ProviderError until selector-discovery "
+            "spike lands (see plan U4).",
+        ),
+    ] = False,
     arrive_before: Annotated[
         str | None,
         typer.Option(
@@ -76,7 +86,12 @@ def search(
     )
 
     built = build_orchestrator(
-        BuildOptions(demo=demo, use_live_aeroplan=use_live_aeroplan, force_refresh=refresh)
+        BuildOptions(
+            demo=demo,
+            use_live_aeroplan=use_live_aeroplan,
+            use_live_alaska=use_live_alaska,
+            force_refresh=refresh,
+        )
     )
     for w in built.warnings:
         console.print(f"[yellow]warning:[/yellow] {w}")

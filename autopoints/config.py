@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     amadeus_client_secret: str = ""
     amadeus_hostname: str = "test"
 
+    # Browserbase: required for the AlaskaProvider (and future Browserbase-driven
+    # direct providers). Empty values mean the provider raises ProviderError at
+    # invocation rather than at process start, so users without Browserbase keys
+    # can still run autopoints in cash-only mode.
+    browserbase_api_key: str = ""
+    browserbase_project_id: str = ""
+
     autopoints_cache_path: Path = Field(
         default_factory=lambda: Path.home() / ".autopoints" / "cache.db"
     )

@@ -111,7 +111,14 @@ def run(
         bool,
         typer.Option(
             "--live-aeroplan/--no-live-aeroplan",
-            help="Hit Aeroplan's live award-search endpoint",
+            help="(deprecated) Hit Aeroplan's live award-search endpoint",
+        ),
+    ] = False,
+    use_live_alaska: Annotated[
+        bool,
+        typer.Option(
+            "--live-alaska/--no-live-alaska",
+            help="Include Alaska Mileage Plan live award search (v0 skeleton).",
         ),
     ] = False,
     webhook: Annotated[
@@ -125,7 +132,14 @@ def run(
 ) -> None:
     """Run all saved searches; print and (optionally) webhook new + ongoing hits."""
     store = store_for_settings()
-    results = asyncio.run(run_all(store, demo=demo, use_live_aeroplan=use_live_aeroplan))
+    results = asyncio.run(
+        run_all(
+            store,
+            demo=demo,
+            use_live_aeroplan=use_live_aeroplan,
+            use_live_alaska=use_live_alaska,
+        )
+    )
 
     if not results:
         console.print("[dim]no watchlists configured[/dim]")
