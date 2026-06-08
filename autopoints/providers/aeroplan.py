@@ -23,6 +23,8 @@ provider remains the safety net.
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from datetime import date
 from typing import Any
@@ -31,6 +33,8 @@ import httpx
 
 from autopoints.providers.base import AwardProvider, ProviderError
 from autopoints.search.models import AwardOffer, Cabin
+
+logger = logging.getLogger(__name__)
 
 # Updated 2026-06-08 per docs/probes/v1c-aeroplan-endpoint-discovery.md.
 _HOST = "akamai-gw.dbaas.aircanada.com"
@@ -42,10 +46,12 @@ _MARKET_TOKEN_ENDPOINT = (
 )
 _COGNITO_ENDPOINT = "https://cognito-identity.us-east-2.amazonaws.com/"
 
-# Cognito identity used by aircanada.com's public web client. This is not
-# a credential — it's the unauthenticated identity pool ID the booking
-# widget itself uses to obtain ephemeral AWS creds for SigV4 signing.
-_COGNITO_IDENTITY_ID = "us-east-2:7f9c31d7-d242-4f7e-afda-916b8c6c2b9c"
+# Cognito unauthenticated identity pool used by aircanada.com's public web
+# client (hardcoded in their main.js bundle). This is the STABLE identifier
+# — fresh per-call IdentityIds are minted at runtime via GetId so we don't
+# have to refresh anything when AC revokes a specific ID. See
+# `docs/probes/v1c-aeroplan-identity-refresh.md` for the discovery story.
+_COGNITO_IDENTITY_POOL_ID = "us-east-2:4a7f6b48-a8ab-499b-9e7f-31e79b54638e"
 
 # Rotated 2026-06-08 (was 1ASIUDALAC). The 1ASIUDALAC in the URL path is
 # a separate market/tenant code and stays in the path.
@@ -127,46 +133,161 @@ class AeroplanProvider(AwardProvider):
         depart_date: date,
         cabin: Cabin,
     ) -> list[AwardOffer]:
-        """v1.c-2 Kasada-bypass path. Not yet implemented end-to-end.
+        """v1.c-2 Kasada-bypass path via Browserbase.
 
-        Outline (per docs/probes/v1c-aeroplan-endpoint-discovery.md §5):
+        Sequence (per docs/probes/v1c-aeroplan-endpoint-discovery.md §5):
 
-        1. Open a Browserbase session via `_browserbase.get_session()`. A real
-           Chrome instance solves the Kasada x-kpsdk-ct/x-kpsdk-r challenge
-           on first navigation to a Kasada-protected aircanada.com page.
-        2. Navigate to https://www.aircanada.com/ and wait for Kasada cookies
-           (`x-kpsdk-cd`) to set on the context. ~3-5 second wait.
-        3. Within the Chrome context, fire the air-bounds POST via
-           `page.evaluate(fetch_script)` so the request carries the Kasada
-           cookies the challenge produced. The fetch script also:
-           - Performs the Cognito + SigV4 + market-token preflight inside the
-             page (so signing uses the same TLS fingerprint that solved Kasada)
-           - Or, more cheaply, runs them server-side and passes the
-             session_token in to the in-page fetch
-        4. Intercept the response via `page.expect_response("**/air-bounds")`
-           and parse the JSON with the same `_parse_air_bounds` helper.
-
-        Status: scaffold only. Requires a live Browserbase API key + project ID
-        in Settings (already added to `autopoints/config.py:Settings` in v0).
-        Tests for this path are gated on @pytest.mark.e2e + the Browserbase
-        creds being present.
+        1. Open a Browserbase session via `_browserbase.get_session()`. The
+           Browserbase residential proxy + stealth fingerprint clears the
+           Kasada challenge naturally on page load.
+        2. Navigate to a Kasada-protected aircanada.com page so the challenge
+           script runs and sets the `x-kpsdk-cd` cookie scoped to the
+           aircanada.com domain.
+        3. Do Cognito identity exchange server-side via httpx (the Cognito
+           endpoint is on `cognito-identity.us-east-2.amazonaws.com`, not
+           Kasada-protected, so this works without the browser).
+        4. Sign the market-token request server-side with SigV4 and fire it
+           via `page.evaluate(fetch)` so the in-browser request carries the
+           Kasada cookies. Same for air-bounds.
+        5. Parse the air-bounds JSON with the existing `_parse_air_bounds`
+           helper.
         """
-        raise ProviderError(
-            "Aeroplan via Browserbase: not yet implemented (v1.c-2). "
-            "See docs/probes/v1c-aeroplan-endpoint-discovery.md §5 for the "
-            "Kasada bypass sequence. Set use_browserbase=False (default) for "
-            "the direct-HTTP path, which works against any non-Kasada "
-            "deployment of the endpoint (e.g. mocked tests, residential "
-            "proxy + custom Kasada solver)."
-        )
+        try:
+            from autopoints.providers._browserbase import get_session
+        except ImportError as e:
+            raise ProviderError(
+                f"Aeroplan via Browserbase: import failed: {e}"
+            ) from e
+
+        page, browser = await get_session()
+        try:
+            # Step 1+2: warm up Kasada cookies. The /aeroplan/use-points/
+            # landing page is the natural target — it's the page the
+            # Aeroplan booking widget loads from, so Kasada solves there
+            # with cookies scoped for the akamai-gw.dbaas.aircanada.com
+            # API host (Kasada cookies are typically wildcard *.aircanada.com).
+            logger.info("Aeroplan: navigating to aircanada.com to warm Kasada")
+            await page.goto(
+                "https://www.aircanada.com/aeroplan/use-points/",
+                wait_until="domcontentloaded",
+                timeout=30_000,
+            )
+            # Kasada's challenge JS executes after DOMContentLoaded. Give it
+            # a few seconds. A more rigorous approach is to wait for the
+            # x-kpsdk-cd cookie to appear; this timeout is a pragmatic floor.
+            await page.wait_for_timeout(5_000)
+
+            # Step 3: Cognito identity exchange (server-side, not Kasada-protected).
+            creds = await self._get_cognito_credentials()
+
+            # Step 4a: SigV4-sign + fire market-token from inside the page.
+            signed = self._build_signed_market_token_request(creds)
+            logger.info("Aeroplan: firing in-page market-token request")
+            market_resp = await page.evaluate(
+                """async (req) => {
+                    const r = await fetch(req.url, {
+                        method: 'POST',
+                        headers: req.headers,
+                        body: req.body,
+                        credentials: 'include',
+                    });
+                    return { status: r.status, body: await r.text() };
+                }""",
+                signed,
+            )
+            if market_resp["status"] != 200:
+                raise ProviderError(
+                    f"Aeroplan via Browserbase: market-token returned "
+                    f"{market_resp['status']}: {market_resp['body'][:300]}"
+                )
+            try:
+                session_token = json.loads(market_resp["body"])["data"]["sessionToken"]
+            except (KeyError, ValueError) as e:
+                raise ProviderError(
+                    f"Aeroplan via Browserbase: market-token shape unexpected: {e}"
+                ) from e
+
+            # Step 4b: fire air-bounds from inside the page.
+            air_bounds_req = {
+                "url": _AIR_BOUNDS_ENDPOINT,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "x-api-key": self._api_key,
+                    "ama-client-ref": str(uuid.uuid4()),
+                    "ama-session-token": session_token,
+                },
+                "body": json.dumps(body),
+            }
+            logger.info("Aeroplan: firing in-page air-bounds request")
+            air_resp = await page.evaluate(
+                """async (req) => {
+                    const r = await fetch(req.url, {
+                        method: 'POST',
+                        headers: req.headers,
+                        body: req.body,
+                        credentials: 'include',
+                    });
+                    return { status: r.status, body: await r.text() };
+                }""",
+                air_bounds_req,
+            )
+            if air_resp["status"] != 200:
+                raise ProviderError(
+                    f"Aeroplan via Browserbase: air-bounds returned "
+                    f"{air_resp['status']}: {air_resp['body'][:300]}"
+                )
+
+            # Step 5: parse with the existing helper.
+            return _parse_air_bounds(
+                json.loads(air_resp["body"]), origin, destination, depart_date, cabin
+            )
+        finally:
+            # Always close the browser to release the Browserbase session
+            # (Browserbase bills by session-minutes; leaked sessions cost real money).
+            await browser.close()
+
+    async def _get_cognito_identity_id(self) -> str:
+        """Mint a fresh unauthenticated IdentityId from the pool.
+
+        The pool itself is the stable identifier (hardcoded in aircanada.com's
+        main.js). Each call to GetId returns an ephemeral IdentityId that's
+        valid until AC revokes it — by always minting fresh we avoid the
+        problem of a revoked hardcoded value breaking us in production.
+        Cheap call (one POST, returns one short string), so we do it on
+        every search rather than caching.
+        """
+        try:
+            resp = await self._client.post(
+                _COGNITO_ENDPOINT,
+                headers={
+                    "Content-Type": "application/x-amz-json-1.1",
+                    "X-Amz-Target": "AWSCognitoIdentityService.GetId",
+                },
+                json={"IdentityPoolId": _COGNITO_IDENTITY_POOL_ID},
+            )
+        except httpx.HTTPError as e:
+            raise ProviderError(f"Aeroplan: Cognito GetId failed: {e}") from e
+        if resp.status_code != 200:
+            raise ProviderError(
+                f"Aeroplan: Cognito GetId returned {resp.status_code}: {resp.text[:200]}"
+            )
+        try:
+            return resp.json()["IdentityId"]
+        except (KeyError, ValueError) as e:
+            raise ProviderError(
+                f"Aeroplan: Cognito GetId response missing IdentityId: {e}"
+            ) from e
 
     async def _get_cognito_credentials(self) -> dict[str, str]:
-        """Step 1: exchange the hard-coded IdentityId for ephemeral AWS creds.
+        """Mint a fresh IdentityId then exchange it for ephemeral AWS creds.
 
-        The Cognito identity pool is unauthenticated and shared with the
-        aircanada.com public web client. Returns dict with AccessKeyId,
-        SecretKey, SessionToken.
+        Two-step Cognito flow:
+        1. GetId(pool_id) → IdentityId (ephemeral, anonymous, freshly minted)
+        2. GetCredentialsForIdentity(IdentityId) → {AccessKeyId, SecretKey, SessionToken}
+
+        Returns the credentials dict with AccessKeyId/SecretKey/SessionToken.
         """
+        identity_id = await self._get_cognito_identity_id()
         try:
             resp = await self._client.post(
                 _COGNITO_ENDPOINT,
@@ -174,13 +295,14 @@ class AeroplanProvider(AwardProvider):
                     "Content-Type": "application/x-amz-json-1.1",
                     "X-Amz-Target": "AWSCognitoIdentityService.GetCredentialsForIdentity",
                 },
-                json={"IdentityId": _COGNITO_IDENTITY_ID},
+                json={"IdentityId": identity_id},
             )
         except httpx.HTTPError as e:
-            raise ProviderError(f"Aeroplan: Cognito identity exchange failed: {e}") from e
+            raise ProviderError(f"Aeroplan: Cognito GetCredentialsForIdentity failed: {e}") from e
         if resp.status_code != 200:
             raise ProviderError(
-                f"Aeroplan: Cognito returned {resp.status_code}: {resp.text[:200]}"
+                f"Aeroplan: Cognito GetCredentialsForIdentity returned "
+                f"{resp.status_code}: {resp.text[:200]}"
             )
         try:
             return resp.json()["Credentials"]
@@ -189,9 +311,14 @@ class AeroplanProvider(AwardProvider):
                 f"Aeroplan: Cognito response missing Credentials: {e}"
             ) from e
 
-    async def _get_market_token(self, creds: dict[str, str]) -> str:
-        """Step 2: SigV4-sign a POST to the market-token endpoint; return
-        the sessionToken needed by air-bounds.
+    def _build_signed_market_token_request(
+        self, creds: dict[str, str]
+    ) -> dict[str, Any]:
+        """Build the SigV4-signed market-token request as a serializable dict.
+
+        Returns ``{"url": str, "headers": dict, "body": str}`` suitable for
+        either an httpx call (direct path) or a page.evaluate fetch (v1.c-2
+        Browserbase path). Extracted so both paths share signing.
         """
         try:
             from botocore.auth import SigV4Auth
@@ -219,12 +346,22 @@ class AeroplanProvider(AwardProvider):
             },
         )
         SigV4Auth(aws_creds, _AWS_SERVICE, _AWS_REGION).add_auth(aws_req)
+        return {
+            "url": _MARKET_TOKEN_ENDPOINT,
+            "headers": dict(aws_req.headers.items()),
+            "body": market_body.decode("utf-8"),
+        }
 
+    async def _get_market_token(self, creds: dict[str, str]) -> str:
+        """Step 2: SigV4-sign a POST to the market-token endpoint; return
+        the sessionToken needed by air-bounds.
+        """
+        signed = self._build_signed_market_token_request(creds)
         try:
             resp = await self._client.post(
-                _MARKET_TOKEN_ENDPOINT,
-                headers=dict(aws_req.headers.items()),
-                content=market_body,
+                signed["url"],
+                headers=signed["headers"],
+                content=signed["body"].encode("utf-8"),
             )
         except httpx.HTTPError as e:
             raise ProviderError(f"Aeroplan: market-token request failed: {e}") from e
