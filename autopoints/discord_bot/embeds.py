@@ -104,19 +104,43 @@ def watchlist_run_embed(
     watchlist: Watchlist,
     hits: list[WatchlistHit],
     only_new: bool = False,
+    warnings: list[str] | None = None,
 ) -> dict:
     filtered = [h for h in hits if h.is_new] if only_new else hits
     title = f"{watchlist.origin} → {watchlist.destination}"
     if watchlist.label:
         title += f"  · {watchlist.label}"
 
+    warnings_field: list[dict] = []
+    if warnings:
+        # When the run carries warnings (degraded result from run_all or
+        # arrive-before filter disabled), surface them so a user watching
+        # only Discord doesn't miss a failed run. Discord caps field values
+        # at 1024 chars; truncate the list and the joined text to fit.
+        warning_text = "\n".join(f"• {w}" for w in warnings[:5])
+        warnings_field = [{
+            "name": "⚠️ Warnings",
+            "value": warning_text[:1024],
+            "inline": False,
+        }]
+
     if not filtered:
-        return {
+        # Degraded runs surface here — pick a non-neutral color when warnings
+        # are present so the user notices a failed run vs a healthy 0-hit run.
+        color = COLOR_BAD if warnings else COLOR_NEUTRAL
+        empty: dict = {
             "title": title,
-            "description": "_No hits above threshold._" if only_new else "_No hits above threshold this run._",
-            "color": COLOR_NEUTRAL,
+            "description": (
+                "_Run failed — see warnings._" if warnings
+                else ("_No hits above threshold._" if only_new
+                      else "_No hits above threshold this run._")
+            ),
+            "color": color,
             "footer": {"text": f"threshold {watchlist.threshold_cpp:.2f}¢"},
         }
+        if warnings_field:
+            empty["fields"] = warnings_field
+        return empty
 
     color = VERDICT_COLOR.get(filtered[0].redemption.verdict, COLOR_NEUTRAL)
     fields: list[dict] = []
@@ -134,6 +158,8 @@ def watchlist_run_embed(
             f"({r.award_offer.depart_date.isoformat()})"
         )
         fields.append({"name": name, "value": value, "inline": False})
+
+    fields.extend(warnings_field)
 
     new_count = sum(1 for h in filtered if h.is_new)
     return {

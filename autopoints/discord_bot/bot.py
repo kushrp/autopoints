@@ -151,7 +151,9 @@ def make_bot(
             await interaction.followup.send("no watchlists configured. use `/watchlist add` first.")
             return
         embeds = [
-            discord.Embed.from_dict(watchlist_run_embed(r.watchlist, r.hits, only_new=only_new))
+            discord.Embed.from_dict(
+                watchlist_run_embed(r.watchlist, r.hits, only_new=only_new, warnings=r.warnings)
+            )
             for r in results
         ]
         # Discord allows up to 10 embeds per message
@@ -176,9 +178,15 @@ async def _watchlist_loop(
             results = await run_all(store_for_settings(), demo=demo_mode)
             for r in results:
                 new_hits = [h for h in r.hits if h.is_new]
-                if not new_hits:
+                # Surface warnings even when no new hits — otherwise a failing
+                # watchlist running unattended in the background is invisible
+                # to the user. r.warnings carries U2's degraded-result text
+                # and U3's "filter disabled" text.
+                if not new_hits and not r.warnings:
                     continue
-                embed = watchlist_run_embed(r.watchlist, new_hits, only_new=True)
+                embed = watchlist_run_embed(
+                    r.watchlist, new_hits, only_new=True, warnings=r.warnings
+                )
                 await channel.send(embed=discord.Embed.from_dict(embed))
         except Exception as e:  # noqa: BLE001 — bot must keep running
             print(f"watchlist loop error: {e}")
