@@ -139,15 +139,18 @@ async def check_orchestrator_arrive_before_demo() -> CheckOutcome:
     name = "orchestrator_arrive_before_demo"
     started = time.perf_counter()
     try:
+        import tempfile
+
         from autopoints.cache.store import TTLCache
-        from autopoints.config import settings
         from autopoints.search.build import BuildOptions, build_orchestrator
         from autopoints.search.models import SearchRequest
 
         built = build_orchestrator(BuildOptions(demo=True))
-        # Use an isolated in-memory cache for the check so we don't depend
-        # on the user's ~/.autopoints/cache.db state.
-        built.orchestrator.cache = TTLCache(":memory:")
+        # Use an isolated tempfile cache so the check doesn't depend on (or
+        # pollute) the user's ~/.autopoints/cache.db state. TTLCache wants a
+        # real Path; sqlite handles per-process creation fine.
+        tmp = Path(tempfile.mkdtemp(prefix="autopoints-livecheck-")) / "cache.db"
+        built.orchestrator.cache = TTLCache(tmp)
         req = SearchRequest(
             origin="JFK",
             destination="LAX",
