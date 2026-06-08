@@ -53,7 +53,7 @@ Strategy context: [`docs/STRATEGY.md`](STRATEGY.md). Each milestone references t
 
 - **v1.a Alaska real implementation** — `AlaskaProvider.search` returns at least one bookable `AwardOffer` with populated time-of-day fields for a known-available partner-award route. Replaces the v0 skeleton; `--live-alaska` exercises the live path end-to-end.
 - **v1.b BA Avios iOS API port** — `BritishAirwaysProvider` (ported from `timrogers/ba_rewards`) returns Avios + taxes for a known route, matching public ba.com display. Pure HTTP — no new browser deps.
-- **v1.c Aeroplan endpoint repair or retire** — either the live `AeroplanProvider` returns results for a known route OR the live provider is deleted and the `--use-live-aeroplan` flag is removed.
+- **v1.c Aeroplan endpoint repair** 🟡 **in progress** — endpoint identified at `akamai-gw.dbaas.aircanada.com/loyalty/dapidynamicplus/...` (see `docs/probes/v1c-aeroplan-endpoint-discovery.md`). v1.c-1 ships the Cognito + SigV4 + market-token handshake skeleton. v1.c-2 routes the final call through Browserbase to solve Kasada bot management. **Recommendation: repair, not retire.**
 
 **v1 done when:** all three sub-PRs merge. Each can ship independently.
 
