@@ -133,6 +133,38 @@ def test_watchlist_run_embed_bad_verdict_uses_red():
     assert e["color"] == COLOR_BAD
 
 
+def test_watchlist_run_embed_no_hits_with_warnings_surfaces_them():
+    """U2 degraded result: hits=[] + warnings=[error text]. The embed must
+    surface the warning and use a non-neutral color so the user notices the
+    failed run vs a healthy zero-hit run."""
+    wl = _watchlist()
+    e = watchlist_run_embed(wl, hits=[], warnings=["watchlist run failed: RuntimeError('boom')"])
+    assert e["color"] == COLOR_BAD
+    assert "Run failed" in e["description"]
+    assert any("⚠️ Warnings" in f["name"] and "boom" in f["value"] for f in e["fields"])
+
+
+def test_watchlist_run_embed_with_hits_and_warnings_appends_warning_field():
+    """A successful watchlist run that also carries warnings (e.g., U3's
+    arrive-before parse failure) appends a warnings field after the hits."""
+    wl = _watchlist()
+    hits = [WatchlistHit(watchlist_id=wl.id, redemption=_redemption(cpp=2.5), is_new=True)]
+    e = watchlist_run_embed(
+        wl, hits, warnings=["arrive-before filter disabled, returning unfiltered results: 25:00XX"]
+    )
+    last_field = e["fields"][-1]
+    assert "⚠️ Warnings" in last_field["name"]
+    assert "filter disabled" in last_field["value"]
+
+
+def test_watchlist_run_embed_no_warnings_omits_field():
+    """Back-compat: existing calls without warnings produce no warnings field."""
+    wl = _watchlist()
+    hits = [WatchlistHit(watchlist_id=wl.id, redemption=_redemption(), is_new=True)]
+    e = watchlist_run_embed(wl, hits)
+    assert not any("Warnings" in f.get("name", "") for f in e.get("fields", []))
+
+
 def test_bot_module_lazy_imports_discord():
     """The bot module imports cleanly even without discord.py installed.
 

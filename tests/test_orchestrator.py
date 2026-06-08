@@ -214,6 +214,29 @@ async def test_arrive_before_cross_tz_drops_late_jst_arrival(cache: TTLCache):
     assert out.redemptions == []
 
 
+async def test_arrive_before_cross_tz_drops_early_jst_arrival_landing_prior_day_in_et(cache: TTLCache):
+    """The planner's specific cross-day-anchor scenario. An offer landing at
+    06:00 JST on 2026-10-16 converts to 17:00 EDT on 2026-10-15. The
+    `.astimezone(filter_tz).date()` anchor must pick 2026-10-15 so the cutoff
+    is 08:00 EDT on Oct 15 and the offer drops (17:00 > 08:00). A buggy anchor
+    on the offer's own arrival_date (Oct 16) would build a cutoff on Oct 16
+    and silently keep the row."""
+    cash = _StubCash(cents=120_000)
+    award = _StubAward(
+        arrival_time=time(6, 0),
+        arrival_date=date(2026, 10, 16),
+        dest_tz="Asia/Tokyo",
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="NRT",
+        depart_date=date(2026, 10, 15), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert out.redemptions == []
+
+
 async def test_arrive_before_cross_tz_keeps_early_jst_arrival(cache: TTLCache):
     """Tokyo-arriving offer landing 20:30 JST 2026-10-16 = 07:30 ET 2026-10-16.
     Filter '08:00ET' anchors cutoff to 2026-10-16, so 07:30 < 08:00 → keep."""
@@ -329,6 +352,47 @@ async def test_arrive_before_uses_earlier_of_award_and_cash_when_both_set(cache:
     )
     out = await orch.run(req, transfer_currencies=["UR"])
     assert len(out.redemptions) == 1
+
+
+async def test_arrive_before_integration_demo_mode_filters_forcing_function(tmp_path):
+    """ROADMAP v0.1 forcing-function gate: a `--arrive-before` filter against
+    demo data must produce strictly fewer redemptions than unfiltered.
+
+    Demo cheapest cash for LAX→JFK is the 08:00 → 14:53 1-stop (AA), so a
+    filter of 08:00ET drops everything paired with it. A lax filter (18:00ET)
+    keeps it. The pair-of-assertions verifies the filter fires both ways.
+    """
+    from autopoints.search.build import BuildOptions, build_orchestrator
+
+    built = build_orchestrator(BuildOptions(demo=True, force_refresh=True))
+
+    unfiltered = await built.orchestrator.run(
+        SearchRequest(
+            origin="LAX", destination="JFK",
+            depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        )
+    )
+    strict = await built.orchestrator.run(
+        SearchRequest(
+            origin="LAX", destination="EWR",
+            depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+            arrive_before_local="08:00ET",
+        )
+    )
+    lax_filter = await built.orchestrator.run(
+        SearchRequest(
+            origin="LAX", destination="LGA",
+            depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+            arrive_before_local="18:00ET",
+        )
+    )
+
+    assert len(unfiltered.redemptions) > 0, "demo run must produce baseline redemptions"
+    assert len(strict.redemptions) < len(unfiltered.redemptions), (
+        f"strict filter (08:00ET) must drop rows: got "
+        f"{len(strict.redemptions)} filtered vs {len(unfiltered.redemptions)} unfiltered"
+    )
+    assert len(lax_filter.redemptions) > 0, "lax filter (18:00ET) must keep redeye-style arrivals"
 
 
 async def test_arrive_before_unparseable_spec_warns_instead_of_failing(cache: TTLCache):

@@ -45,65 +45,37 @@ Strategy context: [`docs/STRATEGY.md`](STRATEGY.md). Each milestone references t
 
 ## v1 — Live award providers
 
-**Goal:** Replace the v0 Alaska skeleton with a real Browserbase + Playwright scraper; port `timrogers/ba_rewards` iOS API for BA Avios; either repair the Aeroplan endpoint or formally retire the live provider.
+**Goal:** Replace the v0 Alaska skeleton with a real live scraper; port `timrogers/ba_rewards` iOS API for BA Avios; either repair the broken Aeroplan endpoint or formally retire the live provider.
 
-**Plan:** TBD (`docs/plans/2026-06-?-003-feat-live-award-providers-plan.md` once we scope it)
-**PR(s):** likely 2–3 separate PRs gated by sub-acceptance:
+**Plan:** TBD per sub-milestone (each sub-PR scopes its own plan in `docs/plans/`).
 
-1. **v1.a — Alaska real implementation**
-   - [ ] Run `scripts/spike_alaska.py` (uncommitted) against a live Browserbase session and record the selector map in a one-time `docs/probes/alaska-selectors.md`
-   - [ ] `AlaskaProvider.search` returns at least 1 `AwardOffer` for a known-available route (e.g., SEA→PVD 2026-09-15 saver economy) with `arrival_time`, `arrival_date`, `dest_tz` populated
-   - [ ] `--live-alaska` from the CLI exercises the live path; results show in the ranked table with verdict
-   - [ ] Browserbase session cost on a single search ≤ $0.05 (verified from dashboard) — if higher, revisit caching TTL
-   - [ ] `@pytest.mark.e2e` test against a recorded HAR or live session
+**Acceptance (one-line per sub-milestone — specific gates live in each sub-plan):**
 
-2. **v1.b — BA Avios iOS API port**
-   - [ ] `BritishAirwaysProvider` ports the auth + JSON shape from `timrogers/ba_rewards`
-   - [ ] Live Avios price + taxes for a known route (LHR→BCN 2026-09-15) matches what ba.com shows within ±500 Avios
-   - [ ] No Browserbase usage (this is a pure HTTP path) — `pyproject.toml` doesn't add new browser deps
-   - [ ] CI green; new unit tests with `respx` fixtures
+- **v1.a Alaska real implementation** — `AlaskaProvider.search` returns at least one bookable `AwardOffer` with populated time-of-day fields for a known-available partner-award route. Replaces the v0 skeleton; `--live-alaska` exercises the live path end-to-end.
+- **v1.b BA Avios iOS API port** — `BritishAirwaysProvider` (ported from `timrogers/ba_rewards`) returns Avios + taxes for a known route, matching public ba.com display. Pure HTTP — no new browser deps.
+- **v1.c Aeroplan endpoint repair or retire** — either the live `AeroplanProvider` returns results for a known route OR the live provider is deleted and the `--use-live-aeroplan` flag is removed.
 
-3. **v1.c — Aeroplan endpoint repair or retire**
-   - [ ] Determine current Air Canada award-search hostname; record finding in `docs/probes/aeroplan-endpoint.md`
-   - [ ] Either: live AC search returns ≥ 1 result for a known route (passes); or: live provider is deleted, `--use-live-aeroplan` flag removed, AC chart-floor remains
-   - [ ] If repaired: BA iOS pattern (no Browserbase, JSON shape) preferred over Browserbase
-
-**v1 done when:** all three sub-acceptance lists pass. Each sub-PR can ship independently; the milestone closes when the last one merges.
+**v1 done when:** all three sub-PRs merge. Each can ship independently.
 
 ---
 
-## v1.5 — AA / Delta direct via Stagehand (gated)
+## v1.5 — AA / Delta direct (gated on Stagehand probe)
 
-**Goal:** Add AA and Delta as live award providers via Browserbase Stagehand. **This milestone is conditional** — the 30-minute Stagehand probe (task #30) must succeed first.
+**Conditional milestone.** The 30-minute Stagehand probe (task #30) must succeed first. If it fails, this milestone stays deferred indefinitely per STRATEGY's documented revert path.
 
-**Gate before starting:**
-- [ ] Stagehand probe (`scripts/probe_stagehand.py`, uncommitted) runs against `aa.com` (PerimeterX) AND `delta.com` (Akamai) without bot blocks for ≥ 5 consecutive searches
-- [ ] Probe output recorded in `docs/probes/stagehand-anti-bot.md` with pass/fail per site and notes on what bypassed defenses (if anything)
-- [ ] If probe fails: v1.5 stays deferred indefinitely per STRATEGY revert path; document the failure and move to v2
+**Gate:** Run `scripts/probe_stagehand.py` (uncommitted) against `aa.com` (PerimeterX) and `delta.com` (Akamai). Record pass/fail in `docs/probes/v15-stagehand-feasibility-research.md`. If the probe passes, scope v1.5 with a dedicated plan.
 
-**Plan:** TBD (only written if probe passes)
-
-**Acceptance gates (only relevant if probe passed):**
-- [ ] Stagehand-driven AA scraper returns ≥ 1 result for a known route (JFK→LHR 2026-10-15 saver economy) with full time-of-day fields
-- [ ] Stagehand-driven Delta scraper returns ≥ 1 result for a known route (JFK→LAX 2026-09-30 main cabin)
-- [ ] Per-search Anthropic/OpenAI token cost ≤ $0.20 each (verified)
-- [ ] AA's MFA flow is either bypassed (pre-warmed Browserbase session) or out-of-scope (logged-out search returns useful data)
+**Acceptance:** scope only after probe passes — gates land with the plan.
 
 ---
 
 ## v2 — Watchlist polish + multi-surface parity
 
-**Goal:** Make the autonomous-background experience actually durable. Surface `--arrive-before` / `--live-alaska` through FastAPI and Discord. Add an MCP server. Build the stale-availability re-verifier flagged in STRATEGY.
+**Goal:** Make the autonomous-background experience durable. Surface `--arrive-before` / `--live-alaska` through FastAPI and Discord. Add an MCP server. Build the stale-availability re-verifier flagged in STRATEGY.
 
-**Plan:** TBD
+**Plan:** TBD when scoped.
 
-**Acceptance gates:**
-- [ ] FastAPI `SearchAPIRequest` and `WatchlistCreate` carry `arrive_before_local` field; Discord slash-commands have matching parameters
-- [ ] MCP server (`autopoints/mcp/server.py`) exposes `search`, `add_watchlist`, `run_watchlists`, `list_balances` tools usable from Claude Code via stdio transport
-- [ ] Stale-availability re-verifier: before a watchlist alert fires, the result is re-hit at the source; if it disappeared, the alert suppresses
-- [ ] Global Browserbase semaphore caps concurrent sessions across all providers and watchlists (prevents the cost-blowout flagged in the v0.1 review)
-- [ ] One watchlist runs autonomously on the NAS for 7 consecutive days; new-hit Discord pings fire only for genuinely new availability (false-positive rate ≤ 10% across the week)
-- [ ] Keychain auth helper (or env-based equivalent for the Linux Docker target) stores Browserbase + airline credentials; live balance scrape for at least 1 program
+**Acceptance:** scoped per-component when planned — major themes are multi-surface parity (FastAPI/Discord/MCP), stale-availability re-verification, global Browserbase concurrency cap, credential storage on the Linux NAS target, and one watchlist running autonomously for a week without manual intervention.
 
 ---
 
