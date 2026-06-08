@@ -182,6 +182,64 @@ async def test_arrive_before_keeps_early_arrivals(cache: TTLCache):
     assert len(out.redemptions) == 1
 
 
+async def test_arrive_before_cross_tz_drops_late_jst_arrival(cache: TTLCache):
+    """Tokyo-arriving offer landing 08:30 JST 2026-10-16 = 19:30 ET 2026-10-15.
+    Filter '08:00ET' anchors cutoff to 2026-10-15 (the day the offer lands in
+    ET), so 19:30 > 08:00 → drop. Catches the previous same-tz-only bug."""
+    cash = _StubCash(cents=120_000)  # high cash -> good CPP
+    award = _StubAward(
+        arrival_time=time(8, 30),
+        arrival_date=date(2026, 10, 16),
+        dest_tz="Asia/Tokyo",
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="NRT",
+        depart_date=date(2026, 10, 15), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert out.redemptions == []
+
+
+async def test_arrive_before_cross_tz_keeps_early_jst_arrival(cache: TTLCache):
+    """Tokyo-arriving offer landing 20:30 JST 2026-10-16 = 07:30 ET 2026-10-16.
+    Filter '08:00ET' anchors cutoff to 2026-10-16, so 07:30 < 08:00 → keep."""
+    cash = _StubCash(cents=120_000)
+    award = _StubAward(
+        arrival_time=time(20, 30),
+        arrival_date=date(2026, 10, 16),
+        dest_tz="Asia/Tokyo",
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="NRT",
+        depart_date=date(2026, 10, 15), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert len(out.redemptions) == 1
+
+
+async def test_arrive_before_no_dest_tz_falls_back_to_filter_tz(cache: TTLCache):
+    """When dest_tz is absent the offer's arrival is interpreted in filter_tz,
+    matching the prior same-tz behavior."""
+    cash = _StubCash(cents=30_000)
+    award = _StubAward(
+        arrival_time=time(7, 13),
+        arrival_date=date(2026, 6, 15),
+        dest_tz=None,
+    )
+    orch = Orchestrator([cash], [award], cache)
+    req = SearchRequest(
+        origin="LAX", destination="JFK",
+        depart_date=date(2026, 6, 14), cabin=Cabin.economy,
+        arrive_before_local="08:00ET",
+    )
+    out = await orch.run(req, transfer_currencies=["UR"])
+    assert len(out.redemptions) == 1
+
+
 async def test_arrive_before_keeps_chart_floor_results_without_times(cache: TTLCache):
     """Chart-floor providers populate no time fields; filter must keep them."""
     cash = _StubCash(cents=30000)
