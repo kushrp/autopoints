@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from autopoints.cache.store import TTLCache
 from autopoints.config import Settings, settings as default_settings
 from autopoints.providers.aeroplan import AeroplanProvider
-from autopoints.providers.amadeus import AmadeusProvider
 from autopoints.providers.base import AwardProvider, CashProvider, ProviderError
 from autopoints.providers.demo import DemoCashProvider
+from autopoints.providers.google_flights import GoogleFlightsProvider
 from autopoints.providers.static_charts import StaticChartProvider
 from autopoints.search.orchestrator import Orchestrator
 
@@ -37,18 +37,11 @@ def build_orchestrator(opts: BuildOptions, settings: Settings = default_settings
     cash_providers: list[CashProvider] = []
     if opts.demo:
         cash_providers.append(DemoCashProvider())
-    elif settings.amadeus_client_id and settings.amadeus_client_secret:
-        cash_providers.append(
-            AmadeusProvider(
-                settings.amadeus_client_id,
-                settings.amadeus_client_secret,
-                settings.amadeus_hostname,
-            )
-        )
     else:
-        warnings.append(
-            "no cash provider configured; set Amadeus credentials in .env or use --demo"
-        )
+        # Google Flights via fli replaces Amadeus (decommissioned 2026-07-17).
+        # No API key required. The provider raises ProviderError on upstream
+        # failure; the orchestrator surfaces it as a warning.
+        cash_providers.append(GoogleFlightsProvider())
 
     award_providers: list[AwardProvider] = []
     if opts.use_live_aeroplan:

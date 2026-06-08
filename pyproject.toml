@@ -14,6 +14,10 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "jinja2>=3.1",
+    # Google Flights backend via fli library (PyPI name `flights`, installed
+    # from git: pip install git+https://github.com/punitarani/fli.git).
+    # Replaces Amadeus (decommissioned 2026-07-17).
+    "flights>=0.10",
 ]
 
 [project.optional-dependencies]
