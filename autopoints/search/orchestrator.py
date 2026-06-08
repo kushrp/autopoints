@@ -140,7 +140,9 @@ class Orchestrator:
                     outcome.redemptions, request.arrive_before_local
                 )
             except ArriveBeforeParseError as e:
-                outcome.warnings.append(str(e))
+                outcome.warnings.append(
+                    f"arrive-before filter disabled, returning unfiltered results: {e}"
+                )
 
         return outcome
 

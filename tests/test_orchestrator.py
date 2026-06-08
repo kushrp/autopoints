@@ -270,7 +270,10 @@ async def test_arrive_before_unparseable_spec_warns_instead_of_failing(cache: TT
     out = await orch.run(req, transfer_currencies=["UR"])
     # Filter is skipped and the redemption survives; warning records the parse failure.
     assert len(out.redemptions) == 1
-    assert any("arrive-before" in w for w in out.warnings)
+    assert any(
+        "arrive-before filter disabled, returning unfiltered results" in w
+        for w in out.warnings
+    )
 
 
 def test_parse_arrive_before_aliases() -> None:
