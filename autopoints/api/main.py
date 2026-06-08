@@ -172,6 +172,8 @@ def create_app() -> FastAPI:
     @app.post("/api/watchlists/run", response_model=list[WatchlistRunView])
     async def run_watchlists(
         demo: bool = True,
+        # live_aeroplan is deprecated 2026-06-07 (endpoint NXDOMAIN). Left in
+        # place for phase-2 repair; see autopoints/providers/aeroplan.py.
         live_aeroplan: bool = False,
     ) -> list[WatchlistRunView]:
         store = store_for_settings()

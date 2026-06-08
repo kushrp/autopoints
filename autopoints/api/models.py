@@ -15,7 +15,12 @@ class SearchAPIRequest(BaseModel):
     cabin: Cabin = Cabin.economy
     passengers: int = Field(default=1, ge=1, le=9)
     demo: bool = True
-    live_aeroplan: bool = False
+    live_aeroplan: bool = Field(
+        default=False,
+        description="(deprecated 2026-06-07) Hit Aeroplan's live award-search "
+        "endpoint. The endpoint hostname returns NXDOMAIN; the flag is left in "
+        "place for phase-2 repair.",
+    )
 
 
 class SearchEcho(BaseModel):
