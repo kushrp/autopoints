@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+import sqlite3
+from datetime import date, time
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from autopoints.search.models import (
 from autopoints.watchlist_runner import run_one
 from autopoints.watchlists import (
     WatchlistStore,
+    _signature,
     filter_hits,
     format_hit_text,
     hit_signatures,
@@ -31,18 +33,22 @@ def _redemption(
     points: int = 12500,
     program: str = "AC",
     transfer: str = "UR",
+    arrival_time: time | None = None,
+    arrival_date: date | None = None,
 ) -> RedemptionResult:
     cash = FlightOffer(
         provider="demo", origin="JFK", destination="PHX",
         depart_date=date(2026, 6, 15), cabin=Cabin.economy,
         carrier="UA", flight_numbers=["UA1"],
         cash_cents=int(points * cpp) + 560,
+        arrival_time=arrival_time, arrival_date=arrival_date,
     )
     award = AwardOffer(
         provider=program, operating_carrier="UA",
         origin="JFK", destination="PHX",
         depart_date=date(2026, 6, 15), cabin=Cabin.economy,
         points=points, taxes_cents=560,
+        arrival_time=arrival_time, arrival_date=arrival_date,
     )
     return RedemptionResult(
         transfer_program=transfer,  # type: ignore[arg-type]
@@ -123,6 +129,61 @@ def test_format_hit_text(store: WatchlistStore):
     hits = filter_hits(wl, [_redemption(cpp=2.5)], seen_signatures=set())
     text = format_hit_text(hits[0], wl)
     assert "NEW" in text and "JFK→PHX" in text and "[trip]" in text and "2.50cpp" in text
+
+
+def test_signature_distinguishes_redeyes_with_different_arrival_times():
+    early = _redemption(arrival_time=time(5, 25), arrival_date=date(2026, 6, 16))
+    late = _redemption(arrival_time=time(7, 13), arrival_date=date(2026, 6, 16))
+    assert _signature(early) != _signature(late)
+
+
+def test_signature_back_compat_when_arrival_fields_unset():
+    # Signature without arrival fields must match the pre-migration shape so
+    # rows in `watchlist_seen` written before the schema migration keep their
+    # identity. The first call has no time data; the second has only one of
+    # the two required fields. Both must collapse to the base signature.
+    base = _redemption()
+    partial = _redemption(arrival_time=time(7, 13), arrival_date=None)
+    assert _signature(base) == _signature(partial)
+
+
+def test_store_init_is_idempotent_for_arrive_before_migration(tmp_path: Path):
+    path = tmp_path / "wl.db"
+    # Simulate a pre-migration database created without `arrive_before_local`.
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "CREATE TABLE watchlists ("
+            "id TEXT PRIMARY KEY, origin TEXT, destination TEXT, "
+            "depart_date TEXT, window_days INTEGER, cabin TEXT, "
+            "passengers INTEGER, threshold_cpp REAL, label TEXT, created_at REAL)"
+        )
+        conn.execute(
+            "INSERT INTO watchlists VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("legacy", "JFK", "PHX", "2026-06-15", 0, "economy", 1, 1.8, "old", 1717718400.0),
+        )
+        conn.commit()
+
+    # Two successive WatchlistStore initializations must not error and must
+    # leave the legacy row readable with arrive_before_local=None.
+    WatchlistStore(path)
+    store = WatchlistStore(path)
+
+    legacy = store.get("legacy")
+    assert legacy is not None
+    assert legacy.arrive_before_local is None
+
+
+def test_add_persists_arrive_before_local(store: WatchlistStore):
+    wl = store.add(
+        origin="JFK", destination="PHX",
+        depart_date=date(2026, 6, 15), window_days=0,
+        cabin=Cabin.economy, passengers=1,
+        threshold_cpp=1.8, arrive_before_local="08:00ET",
+    )
+    fetched = store.get(wl.id)
+    assert fetched is not None
+    assert fetched.arrive_before_local == "08:00ET"
+    assert fetched.to_search_request().arrive_before_local == "08:00ET"
 
 
 def test_run_one_demo_mode_persists_signatures(store: WatchlistStore):

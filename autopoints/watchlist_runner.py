@@ -22,8 +22,15 @@ async def run_one(
     *,
     demo: bool = False,
     use_live_aeroplan: bool = False,
+    use_live_alaska: bool = False,
 ) -> WatchlistRunResult:
-    built = build_orchestrator(BuildOptions(demo=demo, use_live_aeroplan=use_live_aeroplan))
+    built = build_orchestrator(
+        BuildOptions(
+            demo=demo,
+            use_live_aeroplan=use_live_aeroplan,
+            use_live_alaska=use_live_alaska,
+        )
+    )
     outcome = await built.orchestrator.run(wl.to_search_request())
 
     seen = store.seen_signatures(wl.id)
@@ -43,12 +50,21 @@ async def run_all(
     *,
     demo: bool = False,
     use_live_aeroplan: bool = False,
+    use_live_alaska: bool = False,
 ) -> list[WatchlistRunResult]:
     watchlists = store.list()
     if not watchlists:
         return []
     return await asyncio.gather(
-        *[run_one(wl, store, demo=demo, use_live_aeroplan=use_live_aeroplan) for wl in watchlists]
+        *[
+            run_one(
+                wl, store,
+                demo=demo,
+                use_live_aeroplan=use_live_aeroplan,
+                use_live_alaska=use_live_alaska,
+            )
+            for wl in watchlists
+        ]
     )
 
 

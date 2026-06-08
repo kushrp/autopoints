@@ -15,7 +15,12 @@ class SearchAPIRequest(BaseModel):
     cabin: Cabin = Cabin.economy
     passengers: int = Field(default=1, ge=1, le=9)
     demo: bool = True
-    live_aeroplan: bool = False
+    live_aeroplan: bool = Field(
+        default=False,
+        description="(deprecated 2026-06-07) Hit Aeroplan's live award-search "
+        "endpoint. The endpoint hostname returns NXDOMAIN; the flag is left in "
+        "place for phase-2 repair.",
+    )
 
 
 class SearchEcho(BaseModel):
@@ -64,6 +69,10 @@ class WatchlistView(BaseModel):
     threshold_cpp: float
     label: str | None
     created_at: float
+    arrive_before_local: str | None = None
+    """Persisted filter set via `autopoints watchlist add --arrive-before`.
+    Returned for API parity so agents can see what filter the watchlist will
+    apply at run time. CLI-side write of this field is deferred to phase 2."""
 
 
 class WatchlistHitView(BaseModel):

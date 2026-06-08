@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 
 from autopoints.cache.store import TTLCache
 from autopoints.pricing.cpp import build_redemption
@@ -16,6 +18,24 @@ from autopoints.search.models import (
     RedemptionResult,
     SearchRequest,
 )
+
+# Short timezone aliases accepted by the --arrive-before filter. Maps to IANA
+# zone names. Extend by adding entries — order matches the US-time-zone
+# observations most travelers reason in.
+_TZ_ALIASES: dict[str, str] = {
+    "ET": "America/New_York",
+    "CT": "America/Chicago",
+    "MT": "America/Denver",
+    "PT": "America/Los_Angeles",
+    "AKT": "America/Anchorage",
+    "HT": "Pacific/Honolulu",
+}
+
+_ARRIVE_BEFORE_RE = re.compile(r"^(\d{1,2}):(\d{2})([A-Z]+)$")
+
+
+class ArriveBeforeParseError(ValueError):
+    """Raised when --arrive-before doesn't match the expected HH:MM<TZ> shape."""
 
 CASH_TTL = 60 * 60  # 1 hour
 AWARD_TTL = 6 * 60 * 60  # 6 hours
@@ -111,6 +131,17 @@ class Orchestrator:
                 if redemption is not None:
                     outcome.redemptions.append(redemption)
 
+        # Post-rank arrival-time filter. Chart-floor results (no time fields)
+        # are kept — the user sees them with their lower-confidence framing
+        # rather than silently losing them when a filter is in play.
+        if request.arrive_before_local:
+            try:
+                outcome.redemptions = _filter_arrive_before(
+                    outcome.redemptions, request.arrive_before_local
+                )
+            except ArriveBeforeParseError as e:
+                outcome.warnings.append(str(e))
+
         return outcome
 
     async def _cash_with_cache(
@@ -157,3 +188,58 @@ def _cheapest_cash_for(offers: list[FlightOffer], on_date: date) -> FlightOffer 
     if not matching:
         return None
     return min(matching, key=lambda o: o.cash_cents)
+
+
+def parse_arrive_before(spec: str) -> tuple[time, ZoneInfo]:
+    """Parse `HH:MM<TZ>` into `(time, ZoneInfo)`.
+
+    Examples: `08:00ET`, `14:30PT`, `06:00MT`.
+    Raises ArriveBeforeParseError for malformed input or unknown TZ aliases.
+    """
+    match = _ARRIVE_BEFORE_RE.match(spec.strip().upper())
+    if not match:
+        raise ArriveBeforeParseError(
+            f"--arrive-before must look like 'HH:MM<TZ>' (e.g. '08:00ET'); got {spec!r}"
+        )
+    hh, mm, tz_alias = match.groups()
+    try:
+        wall = time(int(hh), int(mm))
+    except ValueError as e:
+        raise ArriveBeforeParseError(
+            f"--arrive-before time-of-day invalid: {spec!r} ({e})"
+        ) from e
+    iana = _TZ_ALIASES.get(tz_alias)
+    if iana is None:
+        known = ", ".join(sorted(_TZ_ALIASES))
+        raise ArriveBeforeParseError(
+            f"--arrive-before TZ {tz_alias!r} not recognized; expected one of: {known}"
+        )
+    return wall, ZoneInfo(iana)
+
+
+def _filter_arrive_before(
+    redemptions: list[RedemptionResult], spec: str
+) -> list[RedemptionResult]:
+    """Drop redemptions whose arrival is at or after the filter time.
+
+    Chart-floor results (no arrival_time / arrival_date) pass the filter —
+    the user sees them with their existing 'chart-floor only' framing rather
+    than losing them silently.
+    """
+    wall, tz = parse_arrive_before(spec)
+    out: list[RedemptionResult] = []
+    for r in redemptions:
+        offer = r.award_offer
+        if offer.arrival_time is None or offer.arrival_date is None:
+            # Chart-floor or otherwise time-less — keep.
+            out.append(r)
+            continue
+        # Resolve the offer's wall-clock arrival into the filter's timezone
+        # for comparison. The offer's dest_tz tells us how to interpret its
+        # arrival_time; without it we conservatively assume the filter TZ.
+        offer_tz = ZoneInfo(offer.dest_tz) if offer.dest_tz else tz
+        arr_dt = datetime.combine(offer.arrival_date, offer.arrival_time, tzinfo=offer_tz)
+        cutoff_dt = datetime.combine(offer.arrival_date, wall, tzinfo=tz)
+        if arr_dt < cutoff_dt:
+            out.append(r)
+    return out

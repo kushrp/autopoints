@@ -1,3 +1,14 @@
+"""Air Canada Aeroplan live award search.
+
+**DEPRECATED 2026-06-07:** the hostname `akamai-akwa-aeroplan.aircanada.com`
+returns NXDOMAIN from public DNS. The provider remains in the codebase, opt-in
+via ``--live-aeroplan``, so a future repair can land without re-introducing
+the module. Default is off; the static-chart provider for AC remains the data
+source until a new endpoint is identified. See ``docs/STRATEGY.md`` for the
+phase-2 repair plan and ``docs/brainstorms/2026-06-07-points-redemption-sprint-requirements.md``
+for the v0 disposition.
+"""
+
 from __future__ import annotations
 
 from datetime import date
@@ -12,6 +23,7 @@ from autopoints.search.models import AwardOffer, Cabin
 # widget. This is a reverse-engineered public endpoint, not an official API —
 # request/response schema can change without notice. The static-chart provider
 # is the safety net.
+# DEPRECATED 2026-06-07: this hostname is NXDOMAIN. Repair is a phase-2 task.
 _ENDPOINT = (
     "https://akamai-akwa-aeroplan.aircanada.com"
     "/loyalty/dapidynamic/1ASIUDALAC/v2/search/air-bounds"

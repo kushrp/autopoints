@@ -26,8 +26,23 @@ def add(
     passengers: Annotated[int, typer.Option(help="Adult passengers")] = 1,
     threshold: Annotated[float, typer.Option(help="Min effective CPP to flag")] = 1.8,
     label: Annotated[str | None, typer.Option(help="Friendly name for this search")] = None,
+    arrive_before: Annotated[
+        str | None,
+        typer.Option(
+            "--arrive-before",
+            help="Persisted filter: only flag results arriving before HH:MM<TZ> "
+            "(e.g. '08:00ET'). Accepted TZs: ET, CT, MT, PT, AKT, HT.",
+        ),
+    ] = None,
 ) -> None:
     """Add a saved search."""
+    if arrive_before is not None:
+        from autopoints.search.orchestrator import ArriveBeforeParseError, parse_arrive_before
+        try:
+            parse_arrive_before(arrive_before)
+        except ArriveBeforeParseError as e:
+            raise typer.BadParameter(str(e)) from e
+
     store = store_for_settings()
     wl = store.add(
         origin=origin,
@@ -38,11 +53,13 @@ def add(
         passengers=passengers,
         threshold_cpp=threshold,
         label=label,
+        arrive_before_local=arrive_before,
     )
+    extra = f" arrive_before={wl.arrive_before_local}" if wl.arrive_before_local else ""
     console.print(
         f"added watchlist [bold]{wl.id}[/bold]: "
         f"{wl.origin}→{wl.destination} {wl.depart_date} ±{wl.window_days}d "
-        f"{wl.cabin.value} threshold={wl.threshold_cpp}cpp"
+        f"{wl.cabin.value} threshold={wl.threshold_cpp}cpp{extra}"
     )
 
 
@@ -94,7 +111,14 @@ def run(
         bool,
         typer.Option(
             "--live-aeroplan/--no-live-aeroplan",
-            help="Hit Aeroplan's live award-search endpoint",
+            help="(deprecated) Hit Aeroplan's live award-search endpoint",
+        ),
+    ] = False,
+    use_live_alaska: Annotated[
+        bool,
+        typer.Option(
+            "--live-alaska/--no-live-alaska",
+            help="Include Alaska Mileage Plan live award search (v0 skeleton).",
         ),
     ] = False,
     webhook: Annotated[
@@ -108,7 +132,14 @@ def run(
 ) -> None:
     """Run all saved searches; print and (optionally) webhook new + ongoing hits."""
     store = store_for_settings()
-    results = asyncio.run(run_all(store, demo=demo, use_live_aeroplan=use_live_aeroplan))
+    results = asyncio.run(
+        run_all(
+            store,
+            demo=demo,
+            use_live_aeroplan=use_live_aeroplan,
+            use_live_alaska=use_live_alaska,
+        )
+    )
 
     if not results:
         console.print("[dim]no watchlists configured[/dim]")

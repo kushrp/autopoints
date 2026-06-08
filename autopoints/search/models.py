@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, time
 from enum import StrEnum
 from typing import Literal
 
@@ -21,6 +21,10 @@ class SearchRequest(BaseModel):
     window_days: int = 0
     cabin: Cabin = Cabin.economy
     passengers: int = 1
+    arrive_before_local: str | None = None
+    """Filter format `HH:MM<TZ>` where TZ ∈ {ET,CT,MT,PT}, e.g. `08:00ET`.
+    Applied post-rank by the orchestrator against `arrival_time` + `arrival_date`
+    in `dest_tz`. Offers with no time fields (chart-floor results) pass."""
 
     def date_window(self) -> list[date]:
         from datetime import timedelta
@@ -43,6 +47,14 @@ class FlightOffer(BaseModel):
     currency: str = "USD"
     duration_minutes: int | None = None
     stops: int = 0
+    # Time-of-day fields are optional so chart-floor providers and pre-migration
+    # cached blobs remain valid. `arrival_date` carries the next-day case for
+    # redeyes that cross midnight.
+    departure_time: time | None = None
+    arrival_time: time | None = None
+    arrival_date: date | None = None
+    origin_tz: str | None = None  # IANA name, e.g. "America/Los_Angeles"
+    dest_tz: str | None = None
 
 
 class AwardOffer(BaseModel):
@@ -57,6 +69,11 @@ class AwardOffer(BaseModel):
     taxes_currency: str = "USD"
     fare_class: str | None = None
     stops: int = 0
+    departure_time: time | None = None
+    arrival_time: time | None = None
+    arrival_date: date | None = None
+    origin_tz: str | None = None
+    dest_tz: str | None = None
 
 
 class RedemptionResult(BaseModel):
