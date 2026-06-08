@@ -15,6 +15,7 @@ adapter is the phase-2 mitigation.
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,8 @@ from autopoints.search.models import Cabin, FlightOffer
 
 if TYPE_CHECKING:
     from fli.models import FlightResult
+
+logger = logging.getLogger(__name__)
 
 _SEAT_TYPE_MAP_NAMES = {
     Cabin.economy: "ECONOMY",
@@ -53,6 +56,15 @@ class GoogleFlightsProvider(CashProvider):
         except ProviderError:
             raise
         except Exception as e:  # noqa: BLE001 — fli wraps several network/parse exceptions
+            # Log the full traceback before wrapping into the typed error so a
+            # persistent fli failure is visible in operator logs, not just in
+            # one terse outcome.warnings line.
+            logger.exception(
+                "fli search failed for %s -> %s on %s",
+                origin,
+                destination,
+                depart_date.isoformat(),
+            )
             raise ProviderError(f"google_flights: fli search failed: {e}") from e
 
         if results is None:

@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from autopoints.cache.store import TTLCache
 from autopoints.pricing.cpp import build_redemption
@@ -140,7 +140,9 @@ class Orchestrator:
                     outcome.redemptions, request.arrive_before_local
                 )
             except ArriveBeforeParseError as e:
-                outcome.warnings.append(str(e))
+                outcome.warnings.append(
+                    f"arrive-before filter disabled, returning unfiltered results: {e}"
+                )
 
         return outcome
 
@@ -217,29 +219,59 @@ def parse_arrive_before(spec: str) -> tuple[time, ZoneInfo]:
     return wall, ZoneInfo(iana)
 
 
+def _offer_arrival_dt(
+    offer: FlightOffer | AwardOffer, filter_tz: ZoneInfo
+) -> datetime | None:
+    """Resolve an offer's arrival to an absolute datetime in its own dest_tz.
+
+    Returns None when the offer carries no time-of-day fields (chart-floor
+    case). Falls back to `filter_tz` when `offer.dest_tz` is absent OR when
+    it names a TZ that ZoneInfo can't resolve (e.g., a corrupted cached blob).
+    The fallback keeps the filter operational rather than letting an
+    unresolvable TZ name crash `Orchestrator.run`.
+    """
+    if offer.arrival_time is None or offer.arrival_date is None:
+        return None
+    if offer.dest_tz:
+        try:
+            offer_tz = ZoneInfo(offer.dest_tz)
+        except ZoneInfoNotFoundError:
+            offer_tz = filter_tz
+    else:
+        offer_tz = filter_tz
+    return datetime.combine(offer.arrival_date, offer.arrival_time, tzinfo=offer_tz)
+
+
 def _filter_arrive_before(
     redemptions: list[RedemptionResult], spec: str
 ) -> list[RedemptionResult]:
-    """Drop redemptions whose arrival is at or after the filter time.
+    """Drop redemptions whose earliest known arrival is at or after the cutoff.
 
-    Chart-floor results (no arrival_time / arrival_date) pass the filter —
-    the user sees them with their existing 'chart-floor only' framing rather
-    than losing them silently.
+    The filter inspects both `award_offer.arrival_time` and `cash_offer.arrival_time`
+    when populated. When both are populated, use the earlier — a cash flight
+    arriving later than its award counterpart doesn't disqualify the award
+    from the filter (the user would still take the earlier of the two). When
+    only one side is populated, use that side. When neither is populated
+    (chart-floor + no-time-cash), keep the redemption.
+
+    The cutoff is anchored to the calendar day the offer's arrival lands on
+    when viewed in the filter's TZ — so a Tokyo redeye arriving 08:30 JST on
+    Oct 16 (= 19:30 ET on Oct 15) is compared against 08:00 ET on Oct 15,
+    not against 08:00 ET on Oct 16.
     """
-    wall, tz = parse_arrive_before(spec)
+    wall, filter_tz = parse_arrive_before(spec)
     out: list[RedemptionResult] = []
     for r in redemptions:
-        offer = r.award_offer
-        if offer.arrival_time is None or offer.arrival_date is None:
-            # Chart-floor or otherwise time-less — keep.
+        award_arr = _offer_arrival_dt(r.award_offer, filter_tz)
+        cash_arr = _offer_arrival_dt(r.cash_offer, filter_tz)
+        candidates = [d for d in (award_arr, cash_arr) if d is not None]
+        if not candidates:
+            # Both sides time-less — keep.
             out.append(r)
             continue
-        # Resolve the offer's wall-clock arrival into the filter's timezone
-        # for comparison. The offer's dest_tz tells us how to interpret its
-        # arrival_time; without it we conservatively assume the filter TZ.
-        offer_tz = ZoneInfo(offer.dest_tz) if offer.dest_tz else tz
-        arr_dt = datetime.combine(offer.arrival_date, offer.arrival_time, tzinfo=offer_tz)
-        cutoff_dt = datetime.combine(offer.arrival_date, wall, tzinfo=tz)
+        arr_dt = min(candidates)
+        filter_day = arr_dt.astimezone(filter_tz).date()
+        cutoff_dt = datetime.combine(filter_day, wall, tzinfo=filter_tz)
         if arr_dt < cutoff_dt:
             out.append(r)
     return out

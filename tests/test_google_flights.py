@@ -148,29 +148,47 @@ def test_malformed_row_is_skipped_not_raised(patch_search: PatchSearch) -> None:
     assert offers[0].cash_cents == 19900
 
 
-def test_upstream_exception_wraps_to_provider_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Any non-ProviderError exception from _search_sync wraps to ProviderError."""
+def test_upstream_exception_wraps_to_provider_error(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Any non-ProviderError exception from _search_sync wraps to ProviderError
+    AND emits a logger.exception call so persistent failure is operator-visible."""
     def boom(*_a: Any, **_kw: Any) -> Any:
         raise RuntimeError("fli crashed")
 
     monkeypatch.setattr(gf, "_search_sync", boom)
-    with pytest.raises(ProviderError) as exc:
-        asyncio.run(
-            gf.GoogleFlightsProvider().search("LAX", "JFK", date(2026, 6, 14), Cabin.economy)
-        )
+    with caplog.at_level("ERROR", logger="autopoints.providers.google_flights"):
+        with pytest.raises(ProviderError) as exc:
+            asyncio.run(
+                gf.GoogleFlightsProvider().search("LAX", "JFK", date(2026, 6, 14), Cabin.economy)
+            )
     assert "google_flights" in str(exc.value)
+    # logger.exception emits at ERROR with the traceback attached. Asserting
+    # exc_info pins the .exception() call over .error() — a mutation to
+    # logger.error would still pass the level check but lose the traceback.
+    records = [r for r in caplog.records if r.name == "autopoints.providers.google_flights"]
+    assert any(
+        r.levelname == "ERROR" and "fli search failed" in r.message and r.exc_info is not None
+        for r in records
+    )
 
 
-def test_provider_error_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
-    """ProviderError raised from _search_sync (e.g. missing fli install) is not re-wrapped."""
+def test_provider_error_passes_through(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """ProviderError raised from _search_sync (e.g. missing fli install) is not
+    re-wrapped — and the broad-catch logger.exception branch is NOT entered."""
     def missing(*_a: Any, **_kw: Any) -> Any:
         raise ProviderError("google_flights: `flights` package not installed.")
 
     monkeypatch.setattr(gf, "_search_sync", missing)
-    with pytest.raises(ProviderError, match="not installed"):
-        asyncio.run(
-            gf.GoogleFlightsProvider().search("LAX", "JFK", date(2026, 6, 14), Cabin.economy)
-        )
+    with caplog.at_level("ERROR", logger="autopoints.providers.google_flights"):
+        with pytest.raises(ProviderError, match="not installed"):
+            asyncio.run(
+                gf.GoogleFlightsProvider().search("LAX", "JFK", date(2026, 6, 14), Cabin.economy)
+            )
+    records = [r for r in caplog.records if r.name == "autopoints.providers.google_flights"]
+    assert records == []
 
 
 def test_unknown_airport_raises_provider_error() -> None:
