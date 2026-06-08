@@ -186,6 +186,52 @@ def test_add_persists_arrive_before_local(store: WatchlistStore):
     assert fetched.to_search_request().arrive_before_local == "08:00ET"
 
 
+def test_run_all_continues_when_one_watchlist_raises(
+    store: WatchlistStore, monkeypatch: pytest.MonkeyPatch
+):
+    """A single watchlist's run failure must not cancel sibling runs.
+
+    Two watchlists added; mock run_one to raise for the first and succeed for
+    the second. run_all must return 2 results: first is a degraded
+    WatchlistRunResult with empty hits + a warning, second is normal.
+    """
+    from autopoints import watchlist_runner
+
+    store.add(
+        origin="JFK", destination="PHX",
+        depart_date=date(2026, 6, 15), window_days=0,
+        cabin=Cabin.economy, passengers=1,
+        threshold_cpp=1.0, label="failing",
+    )
+    store.add(
+        origin="LAX", destination="ORD",
+        depart_date=date(2026, 6, 15), window_days=0,
+        cabin=Cabin.economy, passengers=1,
+        threshold_cpp=1.0, label="ok",
+    )
+
+    call_log: list[str] = []
+
+    async def fake_run_one(wl, _store, **_kw):
+        call_log.append(wl.label)
+        if wl.label == "failing":
+            raise RuntimeError("boom")
+        from autopoints.watchlists import WatchlistRunResult
+        return WatchlistRunResult(watchlist=wl, hits=[], warnings=[])
+
+    monkeypatch.setattr(watchlist_runner, "run_one", fake_run_one)
+
+    results = asyncio.run(watchlist_runner.run_all(store))
+    assert len(results) == 2
+    by_label = {r.watchlist.label: r for r in results}
+    assert by_label["failing"].hits == []
+    assert any("watchlist run failed" in w and "boom" in w for w in by_label["failing"].warnings)
+    assert by_label["ok"].hits == []
+    assert by_label["ok"].warnings == []
+    # Both watchlists were attempted.
+    assert sorted(call_log) == ["failing", "ok"]
+
+
 def test_run_one_demo_mode_persists_signatures(store: WatchlistStore):
     wl = store.add(
         origin="JFK", destination="PHX",

@@ -55,7 +55,11 @@ async def run_all(
     watchlists = store.list()
     if not watchlists:
         return []
-    return await asyncio.gather(
+    # return_exceptions=True so one watchlist's build_orchestrator or run_one
+    # failure does not cancel sibling runs. Failed entries surface as degraded
+    # WatchlistRunResult with the exception text in warnings; the orchestrator
+    # already uses this pattern for cash/award provider fan-out.
+    raw = await asyncio.gather(
         *[
             run_one(
                 wl, store,
@@ -64,8 +68,22 @@ async def run_all(
                 use_live_alaska=use_live_alaska,
             )
             for wl in watchlists
-        ]
+        ],
+        return_exceptions=True,
     )
+    results: list[WatchlistRunResult] = []
+    for wl, entry in zip(watchlists, raw):
+        if isinstance(entry, BaseException):
+            results.append(
+                WatchlistRunResult(
+                    watchlist=wl,
+                    hits=[],
+                    warnings=[f"watchlist run failed: {entry!r}"],
+                )
+            )
+        else:
+            results.append(entry)
+    return results
 
 
 async def post_webhook(url: str, result: WatchlistRunResult) -> None:
