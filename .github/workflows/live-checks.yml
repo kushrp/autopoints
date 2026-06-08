@@ -1,0 +1,94 @@
+name: live-checks
+
+# Weekly health probe against real services (fli/Google Flights, Aeroplan
+# handshake, Browserbase, Discord). Separate from the regular `test` workflow
+# which runs only mocked tests on every PR — this one runs against live
+# backends and is allowed to be flaky/slow.
+#
+# Schedule: Sundays 07:00 UTC. Tweak if it collides with traffic peaks.
+
+on:
+  schedule:
+    - cron: "0 7 * * 0"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Comma-separated check names (blank = all)"
+        required: false
+        default: ""
+
+concurrency:
+  group: live-checks
+  cancel-in-progress: false
+
+jobs:
+  live-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install --no-cache-dir uv
+
+      - name: Create venv and install (dev + discord)
+        # `discord` extra pulls discord.py for the Discord round-trip check.
+        # Browserbase + playwright are needed for the session check.
+        run: |
+          uv venv --python 3.11 .venv
+          uv pip install --python .venv/bin/python -e ".[dev,discord]"
+          uv pip install --python .venv/bin/python browserbase playwright
+          .venv/bin/playwright install --with-deps chromium
+
+      - name: Run live checks
+        env:
+          # Browserbase
+          BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+          BROWSERBASE_PROJECT_ID: ${{ secrets.BROWSERBASE_PROJECT_ID }}
+          # Discord
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_TEST_CHANNEL_ID: ${{ secrets.DISCORD_TEST_CHANNEL_ID }}
+          # Aeroplan API key rotates periodically; override via secret if set,
+          # otherwise the provider's hard-coded default is used.
+          AEROPLAN_API_KEY: ${{ secrets.AEROPLAN_API_KEY }}
+        run: |
+          ONLY_ARG=""
+          if [ -n "${{ inputs.only }}" ]; then
+            ONLY_ARG="--only ${{ inputs.only }}"
+          fi
+          .venv/bin/python scripts/check_live.py --json live-report.json $ONLY_ARG
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-report
+          path: live-report.json
+          if-no-files-found: warn
+
+      # Optional Slack/Discord notify on failure. Define SLACK_WEBHOOK_URL or
+      # NOTIFY_DISCORD_WEBHOOK in repo secrets to enable. Both are skipped
+      # cleanly when unset (the `if:` guards the secret presence).
+      - name: Notify Slack on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\": \":rotating_light: autopoints live-checks FAILED on ${GITHUB_REF_NAME} — ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            "$SLACK_WEBHOOK_URL"
+
+      - name: Notify Discord on failure
+        if: failure() && env.NOTIFY_DISCORD_WEBHOOK != ''
+        env:
+          NOTIFY_DISCORD_WEBHOOK: ${{ secrets.NOTIFY_DISCORD_WEBHOOK }}
+        run: |
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "{\"content\": \"autopoints live-checks FAILED on ${GITHUB_REF_NAME} — ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}" \
+            "$NOTIFY_DISCORD_WEBHOOK"
