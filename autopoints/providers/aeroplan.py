@@ -70,8 +70,21 @@ class AeroplanProvider(AwardProvider):
         self,
         api_key: str = _DEFAULT_API_KEY,
         client: httpx.AsyncClient | None = None,
+        use_browserbase: bool = False,
     ):
+        """
+        Args:
+            api_key: x-api-key for the Aeroplan endpoint (rotated 2026-06-08).
+            client: httpx.AsyncClient for the direct-HTTP path (v1.c-1).
+            use_browserbase: when True, route the air-bounds call through a
+                real Chrome session via `autopoints/providers/_browserbase.py`
+                so Kasada bot management is solved by the browser challenge.
+                This is the v1.c-2 path (see plan). Default False because
+                Browserbase usage costs money and requires API key + project
+                ID in Settings.
+        """
         self._api_key = api_key
+        self._use_browserbase = use_browserbase
         self._client = client or httpx.AsyncClient(
             timeout=20.0,
             headers={
@@ -95,11 +108,56 @@ class AeroplanProvider(AwardProvider):
         cabin: Cabin,
         passengers: int = 1,
     ) -> list[AwardOffer]:
+        body = self._build_search_body(origin, destination, depart_date, passengers)
+        if self._use_browserbase:
+            return await self._search_via_browserbase(
+                body, origin, destination, depart_date, cabin
+            )
         creds = await self._get_cognito_credentials()
         session_token = await self._get_market_token(creds)
-        body = self._build_search_body(origin, destination, depart_date, passengers)
         return await self._search_air_bounds(
             body, session_token, origin, destination, depart_date, cabin
+        )
+
+    async def _search_via_browserbase(
+        self,
+        body: dict[str, Any],
+        origin: str,
+        destination: str,
+        depart_date: date,
+        cabin: Cabin,
+    ) -> list[AwardOffer]:
+        """v1.c-2 Kasada-bypass path. Not yet implemented end-to-end.
+
+        Outline (per docs/probes/v1c-aeroplan-endpoint-discovery.md §5):
+
+        1. Open a Browserbase session via `_browserbase.get_session()`. A real
+           Chrome instance solves the Kasada x-kpsdk-ct/x-kpsdk-r challenge
+           on first navigation to a Kasada-protected aircanada.com page.
+        2. Navigate to https://www.aircanada.com/ and wait for Kasada cookies
+           (`x-kpsdk-cd`) to set on the context. ~3-5 second wait.
+        3. Within the Chrome context, fire the air-bounds POST via
+           `page.evaluate(fetch_script)` so the request carries the Kasada
+           cookies the challenge produced. The fetch script also:
+           - Performs the Cognito + SigV4 + market-token preflight inside the
+             page (so signing uses the same TLS fingerprint that solved Kasada)
+           - Or, more cheaply, runs them server-side and passes the
+             session_token in to the in-page fetch
+        4. Intercept the response via `page.expect_response("**/air-bounds")`
+           and parse the JSON with the same `_parse_air_bounds` helper.
+
+        Status: scaffold only. Requires a live Browserbase API key + project ID
+        in Settings (already added to `autopoints/config.py:Settings` in v0).
+        Tests for this path are gated on @pytest.mark.e2e + the Browserbase
+        creds being present.
+        """
+        raise ProviderError(
+            "Aeroplan via Browserbase: not yet implemented (v1.c-2). "
+            "See docs/probes/v1c-aeroplan-endpoint-discovery.md §5 for the "
+            "Kasada bypass sequence. Set use_browserbase=False (default) for "
+            "the direct-HTTP path, which works against any non-Kasada "
+            "deployment of the endpoint (e.g. mocked tests, residential "
+            "proxy + custom Kasada solver)."
         )
 
     async def _get_cognito_credentials(self) -> dict[str, str]:

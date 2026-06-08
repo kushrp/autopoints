@@ -264,6 +264,40 @@ def test_parser_skips_unparseable_fare_rows(provider: AeroplanProvider) -> None:
     assert offers[0].points == 25000
 
 
+def test_use_browserbase_scaffold_raises_actionable_error() -> None:
+    """v1.c-2 scaffold: use_browserbase=True is the documented Kasada-bypass
+    path but the wiring isn't done. Verify it raises with a clear pointer to
+    the probe doc + the implementation outline."""
+    provider = AeroplanProvider(use_browserbase=True, client=httpx.AsyncClient(timeout=5.0))
+    with pytest.raises(ProviderError) as exc:
+        asyncio.run(
+            provider.search("JFK", "YYZ", date(2026, 10, 15), Cabin.economy)
+        )
+    msg = str(exc.value)
+    assert "Browserbase" in msg
+    assert "v1.c-2" in msg
+    assert "Kasada" in msg
+
+
+def test_use_browserbase_skips_cognito_and_market_token() -> None:
+    """When use_browserbase=True, the direct-HTTP Cognito + market-token
+    handshake is skipped — the in-page fetch (v1.c-2) handles auth itself."""
+    provider = AeroplanProvider(use_browserbase=True, client=httpx.AsyncClient(timeout=5.0))
+    with respx.mock(assert_all_called=False) as mock:
+        # Set up cognito + market-token routes that would be hit by the
+        # direct path. With use_browserbase=True, they should NOT be called.
+        cognito_route = mock.post(_COGNITO_ENDPOINT)
+        market_route = mock.post(_MARKET_TOKEN_ENDPOINT)
+
+        with pytest.raises(ProviderError):
+            asyncio.run(
+                provider.search("JFK", "YYZ", date(2026, 10, 15), Cabin.economy)
+            )
+
+    assert cognito_route.call_count == 0
+    assert market_route.call_count == 0
+
+
 def test_empty_air_bounds_returns_empty_list(provider: AeroplanProvider) -> None:
     with respx.mock() as mock:
         mock.post(_COGNITO_ENDPOINT).respond(json=_cognito_response())
