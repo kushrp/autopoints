@@ -1,16 +1,29 @@
 """Air Canada Aeroplan live award search.
 
-**DEPRECATED 2026-06-07:** the hostname `akamai-akwa-aeroplan.aircanada.com`
-returns NXDOMAIN from public DNS. The provider remains in the codebase, opt-in
-via ``--live-aeroplan``, so a future repair can land without re-introducing
-the module. Default is off; the static-chart provider for AC remains the data
-source until a new endpoint is identified. See ``docs/STRATEGY.md`` for the
-phase-2 repair plan and ``docs/brainstorms/2026-06-07-points-redemption-sprint-requirements.md``
-for the v0 disposition.
+**Status (2026-06-08):** endpoint re-discovered and handshake implemented.
+The original `akamai-akwa-aeroplan.aircanada.com` hostname is NXDOMAIN; the
+live backend has moved to `akamai-gw.dbaas.aircanada.com` and gained a
+multi-step AWS Cognito + SigV4 + market-token handshake. See
+``docs/probes/v1c-aeroplan-endpoint-discovery.md`` for the full reverse
+engineering write-up.
+
+**What works:** the URL + handshake are correct against public scrapers
+(``RiskByPass/riskbypass_demo``, ``xmsley614/nt_tool``, others). Tests use
+``respx`` to mock all three HTTP layers.
+
+**What's still gated:** the production endpoint sits behind Kasada bot
+management (HTTP 429 + ``x-kpsdk-ct`` headers). A server-side signed request
+will be Kasada-blocked. The phase-2 follow-up (v1.c-2) routes the
+``air-bounds`` POST through ``autopoints/providers/_browserbase.py`` so a
+real Chrome session solves the Kasada challenge and the JSON is intercepted
+the way ``lg/awardwiz`` did with Arkalis. Until then, ``--live-aeroplan``
+will raise ``ProviderError`` on production traffic; the static-chart
+provider remains the safety net.
 """
 
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from typing import Any
 
@@ -19,16 +32,27 @@ import httpx
 from autopoints.providers.base import AwardProvider, ProviderError
 from autopoints.search.models import AwardOffer, Cabin
 
-# Aeroplan's public award-search endpoint, used by the aircanada.com booking
-# widget. This is a reverse-engineered public endpoint, not an official API —
-# request/response schema can change without notice. The static-chart provider
-# is the safety net.
-# DEPRECATED 2026-06-07: this hostname is NXDOMAIN. Repair is a phase-2 task.
-_ENDPOINT = (
-    "https://akamai-akwa-aeroplan.aircanada.com"
-    "/loyalty/dapidynamic/1ASIUDALAC/v2/search/air-bounds"
+# Updated 2026-06-08 per docs/probes/v1c-aeroplan-endpoint-discovery.md.
+_HOST = "akamai-gw.dbaas.aircanada.com"
+_AIR_BOUNDS_ENDPOINT = (
+    f"https://{_HOST}/loyalty/dapidynamicplus/1ASIUDALAC/v2/search/air-bounds"
 )
-_DEFAULT_API_KEY = "1ASIUDALAC"  # public widget key, observable in browser devtools
+_MARKET_TOKEN_ENDPOINT = (
+    f"https://{_HOST}/loyalty/dapidynamicplus/1ASIUDALAC/v2/reward/market-token"
+)
+_COGNITO_ENDPOINT = "https://cognito-identity.us-east-2.amazonaws.com/"
+
+# Cognito identity used by aircanada.com's public web client. This is not
+# a credential — it's the unauthenticated identity pool ID the booking
+# widget itself uses to obtain ephemeral AWS creds for SigV4 signing.
+_COGNITO_IDENTITY_ID = "us-east-2:7f9c31d7-d242-4f7e-afda-916b8c6c2b9c"
+
+# Rotated 2026-06-08 (was 1ASIUDALAC). The 1ASIUDALAC in the URL path is
+# a separate market/tenant code and stays in the path.
+_DEFAULT_API_KEY = "Z5R8Rm1sA37iC0gaS5kb69ltHwKBTYzUa89gQDwm"
+
+_AWS_REGION = "us-east-2"
+_AWS_SERVICE = "execute-api"
 
 _CABIN_MAP = {
     Cabin.economy: "eco",
@@ -71,7 +95,106 @@ class AeroplanProvider(AwardProvider):
         cabin: Cabin,
         passengers: int = 1,
     ) -> list[AwardOffer]:
-        body = {
+        creds = await self._get_cognito_credentials()
+        session_token = await self._get_market_token(creds)
+        body = self._build_search_body(origin, destination, depart_date, passengers)
+        return await self._search_air_bounds(
+            body, session_token, origin, destination, depart_date, cabin
+        )
+
+    async def _get_cognito_credentials(self) -> dict[str, str]:
+        """Step 1: exchange the hard-coded IdentityId for ephemeral AWS creds.
+
+        The Cognito identity pool is unauthenticated and shared with the
+        aircanada.com public web client. Returns dict with AccessKeyId,
+        SecretKey, SessionToken.
+        """
+        try:
+            resp = await self._client.post(
+                _COGNITO_ENDPOINT,
+                headers={
+                    "Content-Type": "application/x-amz-json-1.1",
+                    "X-Amz-Target": "AWSCognitoIdentityService.GetCredentialsForIdentity",
+                },
+                json={"IdentityId": _COGNITO_IDENTITY_ID},
+            )
+        except httpx.HTTPError as e:
+            raise ProviderError(f"Aeroplan: Cognito identity exchange failed: {e}") from e
+        if resp.status_code != 200:
+            raise ProviderError(
+                f"Aeroplan: Cognito returned {resp.status_code}: {resp.text[:200]}"
+            )
+        try:
+            return resp.json()["Credentials"]
+        except (KeyError, ValueError) as e:
+            raise ProviderError(
+                f"Aeroplan: Cognito response missing Credentials: {e}"
+            ) from e
+
+    async def _get_market_token(self, creds: dict[str, str]) -> str:
+        """Step 2: SigV4-sign a POST to the market-token endpoint; return
+        the sessionToken needed by air-bounds.
+        """
+        try:
+            from botocore.auth import SigV4Auth
+            from botocore.awsrequest import AWSRequest
+            from botocore.credentials import Credentials
+        except ImportError as e:
+            raise ProviderError(
+                "Aeroplan: botocore is required for SigV4 signing — "
+                "add 'botocore' to dependencies. Run `uv pip install botocore`."
+            ) from e
+
+        aws_creds = Credentials(
+            access_key=creds["AccessKeyId"],
+            secret_key=creds["SecretKey"],
+            token=creds.get("SessionToken"),
+        )
+        market_body = b"{}"
+        aws_req = AWSRequest(
+            method="POST",
+            url=_MARKET_TOKEN_ENDPOINT,
+            data=market_body,
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": self._api_key,
+            },
+        )
+        SigV4Auth(aws_creds, _AWS_SERVICE, _AWS_REGION).add_auth(aws_req)
+
+        try:
+            resp = await self._client.post(
+                _MARKET_TOKEN_ENDPOINT,
+                headers=dict(aws_req.headers.items()),
+                content=market_body,
+            )
+        except httpx.HTTPError as e:
+            raise ProviderError(f"Aeroplan: market-token request failed: {e}") from e
+        if resp.status_code == 429:
+            raise ProviderError(
+                "Aeroplan: market-token returned 429 (Kasada bot challenge). "
+                "Phase 2 (v1.c-2) wires this call through Browserbase to solve "
+                "the Kasada challenge; see docs/probes/v1c-aeroplan-endpoint-discovery.md."
+            )
+        if resp.status_code != 200:
+            raise ProviderError(
+                f"Aeroplan: market-token returned {resp.status_code}: {resp.text[:200]}"
+            )
+        try:
+            return resp.json()["data"]["sessionToken"]
+        except (KeyError, ValueError) as e:
+            raise ProviderError(
+                f"Aeroplan: market-token response missing data.sessionToken: {e}"
+            ) from e
+
+    @staticmethod
+    def _build_search_body(
+        origin: str,
+        destination: str,
+        depart_date: date,
+        passengers: int,
+    ) -> dict[str, Any]:
+        return {
             "bookingCodes": ["X", "I", "O", "R"],  # Aeroplan award fare buckets
             "passengers": {
                 "adults": passengers,
@@ -87,25 +210,48 @@ class AeroplanProvider(AwardProvider):
                 }
             ],
             "isFlexibleSearch": False,
+            "searchPreferences": {"showSoldOut": False},
         }
+
+    async def _search_air_bounds(
+        self,
+        body: dict[str, Any],
+        session_token: str,
+        origin: str,
+        destination: str,
+        depart_date: date,
+        cabin: Cabin,
+    ) -> list[AwardOffer]:
+        """Step 3: POST air-bounds with the session token + ama-client-ref
+        headers. Returns parsed AwardOffers.
+        """
         try:
             resp = await self._client.post(
-                _ENDPOINT,
-                headers={"x-api-key": self._api_key},
+                _AIR_BOUNDS_ENDPOINT,
+                headers={
+                    "x-api-key": self._api_key,
+                    "ama-client-ref": str(uuid.uuid4()),
+                    "ama-session-token": session_token,
+                },
                 json=body,
             )
         except httpx.HTTPError as e:
-            raise ProviderError(f"Aeroplan request failed: {e}") from e
+            raise ProviderError(f"Aeroplan air-bounds request failed: {e}") from e
 
+        if resp.status_code == 429:
+            raise ProviderError(
+                "Aeroplan: air-bounds returned 429 (Kasada bot challenge). "
+                "Phase 2 (v1.c-2) routes this call through Browserbase; see "
+                "docs/probes/v1c-aeroplan-endpoint-discovery.md."
+            )
         if resp.status_code in (401, 403):
             raise ProviderError(
-                f"Aeroplan returned {resp.status_code} — likely bot-blocked or "
-                "the public api_key has rotated. Inspect the live aircanada.com "
-                "award search in browser devtools and update _DEFAULT_API_KEY."
+                f"Aeroplan air-bounds returned {resp.status_code} — api_key may "
+                "have rotated again; check docs/probes/v1c-aeroplan-endpoint-discovery.md."
             )
         if resp.status_code != 200:
             raise ProviderError(
-                f"Aeroplan search failed: {resp.status_code} {resp.text[:200]}"
+                f"Aeroplan air-bounds failed: {resp.status_code} {resp.text[:200]}"
             )
 
         return _parse_air_bounds(resp.json(), origin, destination, depart_date, cabin)
@@ -137,7 +283,9 @@ def _parse_air_bounds(
             or segments[0].get("operatingAirlineCode", "")
         )
 
-        for fare in group.get("airBoundDetails", {}).get("fareFamilies", []) or group.get("fareFamilies", []):
+        for fare in group.get("airBoundDetails", {}).get("fareFamilies", []) or group.get(
+            "fareFamilies", []
+        ):
             cabin_label = (fare.get("hierarchy") or fare.get("cabin") or "").lower()
             if target_cabin not in cabin_label:
                 continue
