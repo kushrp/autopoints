@@ -8,8 +8,7 @@ The end state: a Discord bot you can talk to as a personal travel agent, plus a 
 
 1. A UGREEN NAS with **Docker Manager** installed (or any Docker host).
 2. A **Discord bot token**: create a bot at <https://discord.com/developers/applications> → New Application → Bot → Reset Token. Copy it somewhere safe.
-3. (Optional) **Amadeus free credentials**: <https://developers.amadeus.com/register>. 2,000 calls/month free. If you skip this, the app runs in demo mode with synthetic flight data.
-4. The NAS IP on your LAN (e.g., `192.168.1.50`).
+3. The NAS IP on your LAN (e.g., `192.168.1.50`).
 
 ## Quickest path: the onboarding wizard
 
@@ -86,7 +85,7 @@ The wizard greets you because nothing is configured yet. Walk through:
 
 1. **Welcome** — pick "Set up for NAS Docker deployment."
 2. **Services** — check Web UI + Discord bot + (optional) Watchlist auto-runs.
-3. **Cash data** — if you have Amadeus keys, paste them and hit "Test connection"; otherwise pick "Demo mode."
+3. **Cash data** — nothing to configure; live cash prices come from Google Flights automatically. (Demo mode, if you want it, is a toggle in the Discord/run config.)
 4. **Discord** — paste your bot token; hit "Test connection" to confirm the bot's username comes back. If you set Watchlist auto-runs, add a channel ID and a check interval.
 5. **Seed watchlists** (optional) — pick a template or skip.
 6. **Done** — copy the generated `.env` contents.
@@ -162,8 +161,8 @@ docker exec autopoints-web rm -f /data/.onboarded
 
 - **Volume ownership.** The container runs as UID 1000. If the bind-mount or volume has different ownership on the host, you'll get permission errors. The default Docker named volume (`autopoints-data`) handles this automatically; only worry about it if you switch to a host path mount.
 - **Port 8000 in use.** Some NAS apps already bind 8000. In `docker-compose.yml`, change `"8000:8000"` to `"8088:8000"` (or any free port) and reload.
-- **Outbound firewall.** Some NAS distros ship with restrictive outbound rules. The bot + Amadeus + GHCR all need outbound HTTPS. Ensure `ghcr.io`, `discord.com`, `api.amadeus.com`, and `test.api.amadeus.com` are reachable from the host.
-- **System clock.** Aeroplan and Amadeus signed requests rely on accurate time. `docker exec autopoints-web date` should be within a few seconds of reality. NAS units that have been off for a while sometimes drift; restart `ntpd` if you see auth failures.
+- **Outbound firewall.** Some NAS distros ship with restrictive outbound rules. The bot + Google Flights + GHCR all need outbound HTTPS. Ensure `ghcr.io`, `discord.com`, and `www.google.com` are reachable from the host.
+- **System clock.** Aeroplan signed requests rely on accurate time. `docker exec autopoints-web date` should be within a few seconds of reality. NAS units that have been off for a while sometimes drift; restart `ntpd` if you see auth failures.
 - **NAS sleep.** Aggressive disk sleep makes the first request after idle slow but is otherwise fine. Watchtower's regular poll keeps the disk warm enough.
 
 ## Private registry (advanced)

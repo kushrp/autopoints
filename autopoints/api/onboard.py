@@ -1,6 +1,6 @@
 """Onboarding wizard helpers.
 
-Validates Amadeus + Discord credentials live, generates a populated `.env`
+Validates Discord credentials live, generates a populated `.env`
 and (optionally) a `docker-compose.yml`, and tracks a sentinel file so the
 wizard knows whether to greet a returning user with the search SPA instead.
 """
@@ -19,12 +19,6 @@ from autopoints.config import settings
 SENTINEL_FILENAME = ".onboarded"
 
 
-class AmadeusTestRequest(BaseModel):
-    client_id: str
-    client_secret: str
-    hostname: Literal["test", "production"] = "test"
-
-
 class DiscordTestRequest(BaseModel):
     token: str
 
@@ -37,16 +31,8 @@ class TestResult(BaseModel):
 
 class OnboardStatus(BaseModel):
     configured: bool
-    amadeus_present: bool
     discord_present: bool
     sentinel_exists: bool
-
-
-class AmadeusConfig(BaseModel):
-    enabled: bool = False
-    client_id: str = ""
-    client_secret: str = ""
-    hostname: Literal["test", "production"] = "test"
 
 
 class DiscordConfig(BaseModel):
@@ -61,7 +47,6 @@ class DiscordConfig(BaseModel):
 class GenerateRequest(BaseModel):
     mode: Literal["local", "nas"] = "local"
     services: list[Literal["web", "discord", "autoruns"]] = Field(default_factory=list)
-    amadeus: AmadeusConfig = AmadeusConfig()
     discord: DiscordConfig = DiscordConfig()
 
 
@@ -71,38 +56,6 @@ class GenerateResponse(BaseModel):
 
 
 # ----- live tests -----
-
-
-async def test_amadeus(req: AmadeusTestRequest) -> TestResult:
-    """Try a real OAuth2 token request against Amadeus. Returns ok=False with
-    the API's error code on auth failure; ok=False with a transport message on
-    network failure."""
-    base = (
-        "https://test.api.amadeus.com" if req.hostname == "test"
-        else "https://api.amadeus.com"
-    )
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as c:
-            resp = await c.post(
-                f"{base}/v1/security/oauth2/token",
-                data={
-                    "grant_type": "client_credentials",
-                    "client_id": req.client_id,
-                    "client_secret": req.client_secret,
-                },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-            )
-    except httpx.HTTPError as e:
-        return TestResult(ok=False, error=f"network: {e}")
-
-    if resp.status_code == 200:
-        return TestResult(ok=True)
-    try:
-        body = resp.json()
-        err = body.get("error") or body.get("title") or f"http {resp.status_code}"
-    except Exception:
-        err = f"http {resp.status_code}"
-    return TestResult(ok=False, error=err)
 
 
 async def test_discord(req: DiscordTestRequest) -> TestResult:
@@ -135,12 +88,10 @@ def sentinel_path() -> Path:
 
 def is_configured() -> OnboardStatus:
     sentinel = sentinel_path().exists()
-    amadeus = bool(settings.amadeus_client_id and settings.amadeus_client_secret)
     import os
     discord = bool(os.getenv("DISCORD_BOT_TOKEN"))
     return OnboardStatus(
-        configured=sentinel or amadeus or discord,
-        amadeus_present=amadeus,
+        configured=sentinel or discord,
         discord_present=discord,
         sentinel_exists=sentinel,
     )
@@ -167,14 +118,6 @@ def generate_env(req: GenerateRequest) -> str:
         "# Copy this to `.env` next to your docker-compose.yml.",
         "",
     ]
-    if req.amadeus.enabled and req.amadeus.client_id:
-        lines += [
-            "# Amadeus Self-Service (free 2k/mo)",
-            f"AMADEUS_CLIENT_ID={req.amadeus.client_id}",
-            f"AMADEUS_CLIENT_SECRET={req.amadeus.client_secret}",
-            f"AMADEUS_HOSTNAME={req.amadeus.hostname}",
-            "",
-        ]
     if req.discord.enabled and req.discord.token:
         lines += [
             "# Discord bot",

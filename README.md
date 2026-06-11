@@ -23,7 +23,7 @@ uv pip install -e ".[dev]"
 autopoints-server     # http://localhost:8000 — the wizard greets you
 ```
 
-For the CLI-only path, copy `.env.example` to `.env` and add your Amadeus keys (free 2k/mo at <https://developers.amadeus.com/register>).
+For the CLI-only path, copy `.env.example` to `.env` (optional — cash prices come from Google Flights automatically, no API key required).
 
 ## Usage
 
@@ -45,7 +45,7 @@ Output: a ranked table — one row per `(transfer currency, loyalty program)` pa
 autopoints-server   # serves http://127.0.0.1:8000
 ```
 
-Open the URL — single-page app with a search form, ranked results table, and a date-grid heatmap of best CPP per program per day. Demo mode is on by default so the UI works without API credentials. Toggle it off and configure Amadeus credentials in `.env` for real cash data.
+Open the URL — single-page app with a search form, ranked results table, and a date-grid heatmap of best CPP per program per day. Demo mode is on by default; toggle it off for real cash data from Google Flights (no credentials needed).
 
 ### Watchlists
 
@@ -118,8 +118,8 @@ SearchRequest ─┬──► CashProvider(s) ─────► FlightOffer[]
 ```
 
 - **Cash:**
-  - `AmadeusProvider` — official Self-Service API, free tier (2k/mo).
-  - `DemoCashProvider` — synthetic per-mile pricing, used when `--demo` is set or no Amadeus key is configured.
+  - `GoogleFlightsProvider` — live Google Flights pricing via the `fli` library. No API key required.
+  - `DemoCashProvider` — synthetic per-mile pricing, used when `--demo` is set.
 - **Award:**
   - `StaticChartProvider("AC" | "BA" | "VS")` — distance-based chart lookup for Aeroplan, BA Avios, Virgin Atlantic Flying Club. Works offline. Returns the chart-floor (saver) cost; doesn't confirm live availability.
   - `AeroplanProvider` — reverse-engineered hit against Aeroplan's public award-search endpoint. Enable with `--live-aeroplan`. Schema is undocumented; brittle.
@@ -147,7 +147,7 @@ Effective CPP additionally applies any active transfer bonus from `programs/tran
 
 The plan's verification steps (see `/root/.claude/plans/`):
 
-1. **JFK → PHX, 2026-06-15, economy.** Open Google Flights for the same route — Amadeus should be within ~5%.
+1. **JFK → PHX, 2026-06-15, economy.** Open Google Flights for the same route — the cash price should match (the provider reads from Google Flights).
 2. **Award cross-check:** open `aircanada.com` award search — `--live-aeroplan` output should match exactly.
 3. **CPP boundary:** $180 cash + 12,500 AC pts + $5.60 taxes = 1.39¢ → `bad`. $300 cash same award = 2.36¢ → `great`.
 4. **Cache:** rerun within 1h, second run completes in <100ms.
@@ -186,7 +186,7 @@ autopoints/
     build.py                   # shared provider wiring (CLI + API)
   providers/
     base.py                    # CashProvider / AwardProvider ABCs
-    amadeus.py                 # cash via Amadeus Self-Service
+    google_flights.py          # cash via Google Flights (fli library)
     demo.py                    # synthetic cash data for keyless demos
     aeroplan.py                # live Aeroplan award search (reverse-engineered)
     static_charts.py           # offline chart-floor pricing

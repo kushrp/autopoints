@@ -63,8 +63,8 @@ Some things aren't worth automating yet — walk through these before each relea
    - Expect: heatmap appears with one row per program, one column per date, color-graded cells
 3. Click a results row — expect details expand showing cash + award offers
 4. Click "Effective CPP" header — expect rows resort
-5. Uncheck "Use demo data", set bogus AMADEUS creds, submit
-   - Expect: yellow warning banner about Amadeus failure; award rows still render via chart fallback
+5. Uncheck "Use demo data", submit
+   - Expect: live cash prices from Google Flights; if Google Flights is unreachable, a yellow warning banner appears and award rows still render via chart fallback
 6. Toggle dark mode in OS — expect colors invert reasonably
 7. Resize window narrow — expect layout doesn't break
 
@@ -119,7 +119,7 @@ Failure artifacts (screenshots) upload automatically.
 
 Two independent questions feed every redemption row:
 
-1. **Cash price.** Default provider is **Amadeus Self-Service** — the GDS that powers most travel agencies, Kayak, etc. Free tier is 2k calls/month. Coverage gap: most US LCCs (Spirit/Frontier/Allegiant) and some intl carriers don't appear. Demo mode (default in the UI) bypasses Amadeus entirely with synthetic per-mile pricing.
+1. **Cash price.** Default provider is **Google Flights** (via the `fli` library) — no API key required. Coverage is broad, though the undocumented backend can drift without notice; the provider raises a warning and falls back to chart-floor award results when that happens. Demo mode (default in the UI) bypasses it entirely with synthetic per-mile pricing.
 
 2. **Award price.** Three static distance-based charts: Aeroplan (`AC`), British Airways Avios (`BA`), Virgin Atlantic Flying Club (`VS`). These cover most Star Alliance, oneworld, and SkyTeam partner redemptions via transfer from UR/MR. There's also a live Aeroplan adapter (`--live-aeroplan`) that hits the real public award-search endpoint — brittle by design, marked as such.
 
