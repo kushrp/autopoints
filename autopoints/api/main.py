@@ -22,7 +22,6 @@ from autopoints.api.models import (
     WatchlistView,
 )
 from autopoints.api.onboard import (
-    AmadeusTestRequest,
     DiscordTestRequest,
     GenerateRequest,
     GenerateResponse,
@@ -69,10 +68,6 @@ def create_app() -> FastAPI:
     @app.get("/api/onboard/status", response_model=OnboardStatus)
     async def onboard_status() -> OnboardStatus:
         return onboard_mod.is_configured()
-
-    @app.post("/api/onboard/test/amadeus", response_model=TestResult)
-    async def onboard_test_amadeus(req: AmadeusTestRequest) -> TestResult:
-        return await onboard_mod.test_amadeus(req)
 
     @app.post("/api/onboard/test/discord", response_model=TestResult)
     async def onboard_test_discord(req: DiscordTestRequest) -> TestResult:

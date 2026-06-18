@@ -33,13 +33,7 @@ Open https://discord.com/developers/applications on your phone:
 
 That's the bot. It won't do anything until the NAS comes online.
 
-### 4. Get Amadeus API key (3 minutes, optional)
-
-Skip if you're fine with demo cash data for now — you can do this later.
-
-Otherwise: https://developers.amadeus.com/register → sign up → create an app → copy `API Key` + `API Secret`. Save in your password manager.
-
-### 5. Get your NAS values ready (1 minute)
+### 4. Get your NAS values ready (1 minute)
 
 Open a note on your phone, fill in:
 
@@ -51,8 +45,6 @@ PORTAINER_URL=             # e.g. http://192.168.1.42:9000
 DISCORD_BOT_TOKEN=         # from step 3
 DISCORD_GUILD_ID=          # right-click your server icon → Copy Server ID (enable Dev Mode first)
 DISCORD_NOTIFY_CHANNEL_ID= # right-click target channel → Copy ID
-AMADEUS_CLIENT_ID=         # from step 4, or leave blank
-AMADEUS_CLIENT_SECRET=     # from step 4, or leave blank
 ```
 
 You don't need to know `PORTAINER_API_KEY` or `PORTAINER_ENDPOINT_ID` yet — you'll grab those in 30 seconds at home.
@@ -88,8 +80,6 @@ PORTAINER_ENDPOINT_ID=1
 GHCR_IMAGE=ghcr.io/kushrp/autopoints:latest
 GHCR_PUBLIC=true
 
-AMADEUS_CLIENT_ID=<or blank>
-AMADEUS_CLIENT_SECRET=<or blank>
 DISCORD_BOT_TOKEN=<from step 3>
 DISCORD_GUILD_ID=<your server id>
 DISCORD_NOTIFY_CHANNEL_ID=<your channel id>

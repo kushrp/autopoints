@@ -9,10 +9,6 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    amadeus_client_id: str = ""
-    amadeus_client_secret: str = ""
-    amadeus_hostname: str = "test"
-
     # Browserbase: required for the AlaskaProvider (and future Browserbase-driven
     # direct providers). Empty values mean the provider raises ProviderError at
     # invocation rather than at process start, so users without Browserbase keys
