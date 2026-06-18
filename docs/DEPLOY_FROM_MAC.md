@@ -83,7 +83,6 @@ Have these ready (or leave blank — the app degrades gracefully):
 
 | Var | Required? | Where to get it |
 |---|---|---|
-| `AMADEUS_CLIENT_ID`, `AMADEUS_CLIENT_SECRET` | optional (else demo) | https://developers.amadeus.com/register, free 2k/mo |
 | `DISCORD_BOT_TOKEN` | required to use Discord | https://discord.com/developers/applications → New App → Bot → Reset Token |
 | `DISCORD_GUILD_ID` | optional (faster sync) | In Discord enable Dev Mode → right-click your server → Copy ID |
 | `DISCORD_NOTIFY_CHANNEL_ID` | optional (auto-runs) | Right-click target channel → Copy ID |
@@ -118,8 +117,6 @@ GHCR_PUBLIC=true     # set false if the package is private; Claude will ask for 
 
 ## Secrets (paste these too, redact in conversation history if sharing screenshots)
 
-AMADEUS_CLIENT_ID=
-AMADEUS_CLIENT_SECRET=
 DISCORD_BOT_TOKEN=
 DISCORD_GUILD_ID=
 DISCORD_NOTIFY_CHANNEL_ID=
@@ -329,4 +326,4 @@ Some guardrails worth knowing about. Claude will refuse or pause for confirmatio
 | `.env.docker.example` | Template for the env file Claude generates |
 | `.github/workflows/release.yml` | Builds + pushes the image to GHCR on every `main` push |
 
-Total recurring cost: **$0/month.** The NAS is hardware you already own; everything else (Amadeus, GHCR, Discord) has a free tier sufficient for personal use.
+Total recurring cost: **$0/month.** The NAS is hardware you already own; everything else (Google Flights, GHCR, Discord) is free for personal use.

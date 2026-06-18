@@ -43,7 +43,7 @@ def test_transfer_ratios_aeromexico_mr():
 
 def _cash() -> FlightOffer:
     return FlightOffer(
-        provider="amadeus",
+        provider="google_flights",
         origin="JFK",
         destination="PHX",
         depart_date=date(2026, 6, 15),

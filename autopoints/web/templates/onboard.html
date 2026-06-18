@@ -113,51 +113,10 @@
         <p class="muted">Cash prices anchor the cents-per-point math. Demo mode works fine for evaluating autopoints.</p>
       </header>
 
-      <fieldset class="wizard-radio-cards" role="radiogroup" aria-labelledby="step3-heading">
-        <label class="wizard-card-option">
-          <input type="radio" name="cash-source" value="demo" />
-          <span class="wizard-card-option-body">
-            <span class="wizard-card-option-title">Demo mode</span>
-            <span class="wizard-card-option-desc">No key needed. Synthetic prices. Great for trying out autopoints.</span>
-          </span>
-        </label>
-        <label class="wizard-card-option">
-          <input type="radio" name="cash-source" value="amadeus" />
-          <span class="wizard-card-option-body">
-            <span class="wizard-card-option-title">Amadeus Self-Service</span>
-            <span class="wizard-card-option-desc">Free 2,000 requests/month. Real cash fares from a global GDS.</span>
-          </span>
-        </label>
-      </fieldset>
-
-      <div class="wizard-conditional" data-show-when="cash-source=amadeus" hidden>
-        <div class="form-grid">
-          <label class="field">
-            <span>Client ID</span>
-            <input type="text" name="amadeus_client_id" autocomplete="off" />
-          </label>
-          <label class="field">
-            <span>Client secret</span>
-            <input type="password" name="amadeus_client_secret" autocomplete="new-password" />
-          </label>
-          <label class="field">
-            <span>Hostname</span>
-            <select name="amadeus_hostname">
-              <option value="test" selected>test</option>
-              <option value="production">production</option>
-            </select>
-          </label>
-        </div>
-
-        <p class="wizard-hint">
-          <a href="https://developers.amadeus.com" target="_blank" rel="noopener noreferrer">Get free credentials at developers.amadeus.com</a>
-        </p>
-
-        <div class="wizard-test-row">
-          <button type="button" class="wizard-test-btn" data-test="amadeus">Test connection</button>
-          <span class="wizard-status" data-status="amadeus" aria-live="polite"></span>
-        </div>
-      </div>
+      <p class="wizard-hint">
+        Nothing to configure here. autopoints fetches live cash fares from Google Flights
+        automatically — no API key, credentials, or setup required.
+      </p>
 
       <p class="wizard-error" data-step-error="3" role="alert" aria-live="polite"></p>
 
@@ -203,7 +162,7 @@
           <input type="checkbox" name="discord_demo_mode" />
           <span class="wizard-check-body">
             <span class="wizard-check-title">Force demo mode</span>
-            <span class="wizard-check-desc">Bot always returns synthetic data, ignoring Amadeus or live scrapers.</span>
+            <span class="wizard-check-desc">Bot always returns synthetic data, ignoring live data sources.</span>
           </span>
         </label>
       </div>
