@@ -11,7 +11,7 @@ from autopoints.providers.aeroplan import AeroplanProvider
 from autopoints.providers.alaska import AlaskaProvider
 from autopoints.providers.base import AwardProvider, CashProvider, ProviderError
 from autopoints.providers.demo import DemoCashProvider
-from autopoints.providers.google_flights import GoogleFlightsProvider
+from autopoints.providers.fast_flights import FastFlightsProvider
 from autopoints.providers.static_charts import StaticChartProvider
 from autopoints.search.orchestrator import Orchestrator
 
@@ -52,10 +52,11 @@ def build_orchestrator(opts: BuildOptions, settings: Settings = default_settings
     if opts.demo:
         cash_providers.append(DemoCashProvider())
     else:
-        # Google Flights via fli replaces Amadeus (decommissioned 2026-07-17).
-        # No API key required. The provider raises ProviderError on upstream
-        # failure; the orchestrator surfaces it as a warning.
-        cash_providers.append(GoogleFlightsProvider())
+        # Google Flights cash via fast-flights. The older `fli` provider returns
+        # None against current Google Flights (schema drift, June 2026), so
+        # fast-flights is the working scraper. No API key. On a parse break it
+        # raises ProviderError and the orchestrator degrades to chart-floor.
+        cash_providers.append(FastFlightsProvider())
 
     award_providers: list[AwardProvider] = []
     live_aeroplan = _resolve_live_aeroplan(opts.use_live_aeroplan, settings)
