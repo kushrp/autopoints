@@ -20,6 +20,10 @@ dependencies = [
     # direct URL ensures pip pulls the right code regardless of PyPI state.
     # Replaces Amadeus (decommissioned 2026-07-17).
     "flights @ git+https://github.com/punitarani/fli.git@main",
+    # fast-flights: resilient Google Flights scraper. `fli` returns None against
+    # current Google Flights (schema drift, June 2026); fast-flights is the
+    # working cash backend. No API key.
+    "fast-flights>=3.0",
     # AWS SigV4 signing for the Aeroplan market-token handshake (v1.c).
     # See docs/probes/v1c-aeroplan-endpoint-discovery.md.
     "botocore>=1.34",
